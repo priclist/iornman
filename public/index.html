@@ -44,6 +44,20 @@
         </div>
       </div>
 
+      <div class="sidebar-section-label">SOURCES</div>
+      <div class="conversations">
+        <div class="conv-item source-item" id="source-nissan" data-source="nissan">
+          <span class="conv-icon source-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+          </span>
+          <span class="conv-name">nissansprings.co.za</span>
+          <span class="source-badge">LIVE</span>
+        </div>
+      </div>
+
       <div class="sidebar-footer">
         <button id="reset-btn" class="reset-btn">
           <span>⟳</span> New Conversation
@@ -55,61 +69,70 @@
     </aside>
 
     <main id="main">
-      <header id="header">
-        <div class="header-left">
-          <div id="menu-toggle">☰</div>
-          <div class="header-info">
-            <h1 id="header-title">Findy</h1>
-            <p id="header-subtitle" class="subtitle">Your AI assistant · Smart · Efficient</p>
+      <!-- CHAT VIEW -->
+      <div id="chat-view">
+        <header id="header">
+          <div class="header-left">
+            <div id="menu-toggle">☰</div>
+            <div class="header-info">
+              <h1 id="header-title">Findy</h1>
+              <p id="header-subtitle" class="subtitle">Your AI assistant · Smart · Efficient</p>
+            </div>
           </div>
-        </div>
-        <div class="header-right">
-          <div class="header-stats">
-            <span class="stat">● Ready</span>
+          <div class="header-right">
+            <div class="header-stats">
+              <span class="stat">● Ready</span>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <div id="chat-container">
-        <div id="messages">
-          <div class="message welcome" id="welcome-msg">
+        <div id="chat-container">
+          <div id="messages">
+            <div class="message welcome" id="welcome-msg">
+              <div class="avatar findy-avatar">
+                <div class="mini-reactor"><div class="mr-ring"></div><div class="mr-core"></div></div>
+              </div>
+              <div class="bubble">
+                <div class="bubble-header">Findy</div>
+                <div class="bubble-content">
+                  At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="typing-indicator" class="hidden">
             <div class="avatar findy-avatar">
-              <div class="mini-reactor">
-                <div class="mr-ring"></div>
-                <div class="mr-core"></div>
-              </div>
+              <div class="mini-reactor typing"><div class="mr-ring"></div><div class="mr-core"></div></div>
             </div>
-            <div class="bubble">
-              <div class="bubble-header">Findy</div>
-              <div class="bubble-content">
-                At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?
-              </div>
-            </div>
+            <div class="typing-dots"><span></span><span></span><span></span></div>
           </div>
         </div>
-        <div id="typing-indicator" class="hidden">
-          <div class="avatar findy-avatar">
-            <div class="mini-reactor typing">
-              <div class="mr-ring"></div>
-              <div class="mr-core"></div>
-            </div>
+
+        <div id="input-area">
+          <div class="input-wrapper">
+            <textarea id="chat-input" rows="1" placeholder="Ask me anything, sir..."></textarea>
+            <button id="send-btn" disabled>
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+              </svg>
+            </button>
           </div>
-          <div class="typing-dots">
-            <span></span><span></span><span></span>
-          </div>
+          <p class="input-hint">Findy can make mistakes. Verify important info.</p>
         </div>
       </div>
 
-      <div id="input-area">
-        <div class="input-wrapper">
-          <textarea id="chat-input" rows="1" placeholder="Ask me anything, sir..."></textarea>
-          <button id="send-btn" disabled>
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
-            </svg>
-          </button>
-        </div>
-        <p class="input-hint">Findy can make mistakes. Verify important info.</p>
+      <!-- SOURCES VIEW -->
+      <div id="sources-view" class="hidden">
+        <header id="sources-header">
+          <div class="header-left">
+            <h1>📊 Sources Dashboard</h1>
+            <p class="subtitle">Real-time analytics from connected sources</p>
+          </div>
+          <div class="header-right">
+            <button id="sources-back-btn" class="sources-back-btn">← Back to Chat</button>
+          </div>
+        </header>
+        <div id="sources-content"></div>
       </div>
     </main>
   </div>

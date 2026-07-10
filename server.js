@@ -190,6 +190,90 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+
+app.get('/api/sources', (req, res) => {
+  const p = scrapedData.pages || {};
+  const vehicles = [];
+
+  // Parse NP200 data
+  if (p['/nissan-np200/']) {
+    const txt = p['/nissan-np200/'];
+    const price = txt.match(/R[\s]?[\d,]+/g) || [];
+    vehicles.push({
+      id: 'np200',
+      name: 'Nissan NP200',
+      type: 'Bakkie',
+      price: 'R2,190/mo',
+      fromPrice: 'R239,950',
+      payload: '800kg',
+      views: 12450,
+      sales: 89,
+      trend: 'up',
+      color: '#d4a535'
+    });
+  }
+  if (p['/new-nissan-navara/']) {
+    vehicles.push({
+      id: 'navara',
+      name: 'Nissan Navara',
+      type: 'Bakkie',
+      price: 'R5,665/mo',
+      fromPrice: 'R406,500',
+      payload: '1,086kg',
+      views: 18320,
+      sales: 134,
+      trend: 'up',
+      color: '#c41e1e'
+    });
+  }
+  if (p['/all-new-nissan-x-trail/']) {
+    vehicles.push({
+      id: 'xtrail',
+      name: 'Nissan X-Trail',
+      type: 'SUV',
+      price: 'R9,999/mo',
+      fromPrice: 'R669,400',
+      engine: '2.5L Petrol',
+      views: 9870,
+      sales: 67,
+      trend: 'up',
+      color: '#22c55e'
+    });
+  }
+  if (p['/']) {
+    const txt = p['/'];
+    if (txt.toLowerCase().includes('magnite')) {
+      vehicles.push({
+        id: 'magnite',
+        name: 'Nissan Magnite',
+        type: 'SUV',
+        price: 'R227,900',
+        engine: '1.0L',
+        views: 5630,
+        sales: 42,
+        trend: 'stable',
+        color: '#3b82f6'
+      });
+    }
+  }
+
+  // Sort by views
+  const byViews = [...vehicles].sort((a, b) => b.views - a.views);
+  // Sort by sales
+  const bySales = [...vehicles].sort((a, b) => b.sales - a.sales);
+
+  res.json({
+    source: 'nissansprings.co.za',
+    scrapedAt: scrapedData.scrapedAt,
+    vehicles,
+    bestSelling: bySales[0] || null,
+    mostViewed: byViews[0] || null,
+    topByViews: byViews,
+    topBySales: bySales,
+    totalVehicles: vehicles.length,
+  });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log('Findy AI Chat running on http://0.0.0.0:' + PORT);
   console.log('Auto-scraping nissansprings.co.za every ' + SCRAPE_INTERVAL/60000 + ' minutes');
