@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Findy - Log in</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #FFFFFF;
+      color: #202123;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ──────── LANDING PAGE ──────── */
+    .landing {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 60px 24px 40px;
+    }
+
+    .landing-chat-preview {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .preview-user {
+      align-self: flex-end;
+      background: #1A1A1A;
+      color: #fff;
+      padding: 14px 20px;
+      border-radius: 20px 20px 4px 20px;
+      font-size: 16px;
+      font-weight: 600;
+      max-width: 75%;
+    }
+
+    .preview-bot-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #6E6E80;
+      padding-left: 4px;
+    }
+
+    .preview-bot {
+      background: #EDEDF0;
+      color: #202123;
+      padding: 14px 20px;
+      border-radius: 20px 20px 20px 4px;
+      font-size: 16px;
+      font-weight: 600;
+      max-width: 80%;
+      line-height: 1.5;
+    }
+
+    .preview-typing {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 4px;
+    }
+
+    .preview-typing-icon {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .preview-typing-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .preview-typing-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #202123;
+      animation: dotBounce 1.4s ease-in-out infinite;
+    }
+
+    .preview-typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .preview-typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dotBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-6px); opacity: 1; }
+    }
+
+    .landing-brand {
+      text-align: center;
+      padding: 40px 0;
+    }
+
+    .landing-logo {
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: -2px;
+      color: #202123;
+    }
+
+    .landing-logo span {
+      color: #10a37f;
+    }
+
+    .landing-tagline {
+      font-size: 24px;
+      font-weight: 800;
+      color: #202123;
+      margin-top: 16px;
+      line-height: 1.3;
+      max-width: 320px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .landing-buttons {
+      width: 100%;
+      max-width: 380px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn-register {
+      flex: 1;
+      padding: 18px 24px;
+      background: #1A1A1A;
+      color: #fff;
+      border: none;
+      border-radius: 30px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .btn-register:hover { opacity: 0.85; }
+
+    .btn-login {
+      flex: 1;
+      padding: 18px 24px;
+      background: #EDEDF0;
+      color: #202123;
+      border: none;
+      border-radius: 30px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-login:hover { background: #dddde0; }
+
+    /* ──────── LOGIN PAGE ──────── */
+    .login-page {
+      min-height: 100vh;
+      display: none;
+      flex-direction: column;
+      padding: 20px 24px 40px;
+      max-width: 440px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .login-page.active {
+      display: flex;
+    }
+
+    .landing.hidden {
+      display: none;
+    }
+
+    .login-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .back-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #202123;
+      padding: 4px;
+    }
+
+    .login-header-logo {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -1px;
+    }
+
+    .login-header-logo span {
+      color: #10a37f;
+    }
+
+    .login-title {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .login-subtitle {
+      font-size: 16px;
+      color: #6E6E80;
+      font-weight: 400;
+      margin-bottom: 32px;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-group input {
+      width: 100%;
+      padding: 18px 20px;
+      border: 1.5px solid #E5E5E5;
+      border-radius: 16px;
+      font-size: 16px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+      color: #202123;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .input-group input:focus {
+      border-color: #10a37f;
+    }
+
+    .input-group input::placeholder {
+      color: #8E8EA0;
+      font-weight: 400;
+    }
+
+    .error-message {
+      background: #FEF2F2;
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .error-message.show {
+      display: block;
+    }
+
+    .error-message .error-title {
+      color: #DC2626;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .error-message .error-detail {
+      color: #6E6E80;
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .login-links {
+      margin: 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .login-links a {
+      color: #10a37f;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .login-links a:hover {
+      text-decoration: underline;
+    }
+
+    .login-submit {
+      margin-top: auto;
+      width: 100%;
+      padding: 18px;
+      background: #EDEDF0;
+      color: #202123;
+      border: none;
+      border-radius: 30px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .login-submit:hover {
+      background: #dddde0;
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 15px;
+      color: #6E6E80;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LANDING / SPLASH -->
+  <div class="landing" id="landing">
+    <div class="landing-chat-preview">
+      <div class="preview-user">what do I need to find today</div>
+      <div class="preview-bot-label">Findy</div>
+      <div class="preview-bot">I can help you find anything — answers, files, ideas. Just ask me.</div>
+      <div class="preview-typing">
+        <span class="preview-typing-icon">F</span>
+        <div class="preview-typing-dots">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="landing-brand">
+      <div class="landing-logo">find<span>y</span></div>
+      <p class="landing-tagline">your AI assistant, always ready to help</p>
+    </div>
+
+    <div class="landing-buttons">
+      <button class="btn-register" id="show-login">Log in</button>
+    </div>
+  </div>
+
+  <!-- LOGIN PAGE -->
+  <div class="login-page" id="login-page">
+    <div class="login-header">
+      <button class="back-btn" id="back-btn">←</button>
+      <div class="login-header-logo">find<span>y</span></div>
+    </div>
+
+    <h1 class="login-title">Welcome back</h1>
+    <p class="login-subtitle">We're excited to see you again.</p>
+
+    <div class="input-group">
+      <input type="text" id="email" placeholder="Username" autocomplete="username">
+    </div>
+
+    <div class="input-group">
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    </div>
+
+    <div class="error-message" id="error-msg">
+      <div class="error-title">Something went wrong</div>
+      <div class="error-detail">Check your credentials and try again.</div>
+    </div>
+
+    <div class="login-links">
+      <a href="#">Forgot password?</a>
+    </div>
+
+    <button class="login-submit" id="login-btn">Log in</button>
+
+    <p class="login-footer">Find smarter. Do more.</p>
+  </div>
+
+  <script>
+    const landing = document.getElementById('landing');
+    const loginPage = document.getElementById('login-page');
+    const showLoginBtn = document.getElementById('show-login');
+    const backBtn = document.getElementById('back-btn');
+    const loginBtn = document.getElementById('login-btn');
+    const errorMsg = document.getElementById('error-msg');
+
+    showLoginBtn.addEventListener('click', () => {
+      landing.classList.add('hidden');
+      loginPage.classList.add('active');
+    });
+
+    backBtn.addEventListener('click', () => {
+      landing.classList.remove('hidden');
+      loginPage.classList.remove('active');
+      errorMsg.classList.remove('show');
+    });
+
+    const users = [
+      { username: 'nisan', password: 'nisan1' }
+    ];
+
+    loginBtn.addEventListener('click', () => {
+      const username = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      if (!username || !password) {
+        errorMsg.querySelector('.error-title').textContent = 'Missing fields';
+        errorMsg.querySelector('.error-detail').textContent = 'Please enter your username and password.';
+        errorMsg.classList.add('show');
+        return;
+      }
+
+      const user = users.find(u => u.username === username && u.password === password);
+      if (user) {
+        errorMsg.classList.remove('show');
+        window.location.href = '/';
+      } else {
+        errorMsg.querySelector('.error-title').textContent = 'Something went wrong';
+        errorMsg.querySelector('.error-detail').textContent = 'Invalid username or password.';
+        errorMsg.classList.add('show');
+      }
+    });
+
+    // Enter key to submit
+    document.querySelectorAll('.input-group input').forEach(input => {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') loginBtn.click();
+      });
+    });
+  </script>
+</body>
+</html>

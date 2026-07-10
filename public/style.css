@@ -19,6 +19,8 @@ body {
   color: var(--text-primary);
   height: 100vh;
   overflow: hidden;
+  font-size: 17px;
+  font-weight: 500;
 }
 
 #app {
@@ -215,11 +217,11 @@ body {
 .mr-core { display: none; }
 
 .bubble {
-  padding: 14px 20px;
+  padding: 16px 22px;
   border-radius: 20px;
   line-height: 1.6;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 17px;
+  font-weight: 600;
   max-width: 100%;
 }
 
@@ -239,10 +241,10 @@ body {
 }
 
 .bubble-header {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--text-secondary);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   letter-spacing: 0;
   text-transform: none;
   padding-left: 8px;
@@ -374,7 +376,8 @@ body {
   padding: 10px 0;
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, sans-serif;
-  font-size: 15px;
+  font-size: 17px;
+  font-weight: 500;
   resize: none;
   max-height: 150px;
   line-height: 1.5;
@@ -426,7 +429,21 @@ body {
 
 /* ──────── RESPONSIVE ──────── */
 @media (max-width: 768px) {
-  #sidebar { display: none; }
+  #sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+  }
+  #sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+  }
   #menu-toggle { display: block; }
   #header { padding: 24px 20px; }
   #chat-container { padding: 0; }
