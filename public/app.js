@@ -66,7 +66,15 @@ function addMessage(role, content, isStreaming = false) {
   const div = document.createElement('div');
   div.className = `message ${role}`;
 
+<<<<<<< HEAD
   const header = role === 'assistant' ? 'Ironman AI' : '';
+=======
+  const avatar = role === 'assistant'
+    ? `<div class="avatar ironman-avatar"><div class="mini-reactor"><div class="mr-ring"></div><div class="mr-core"></div></div></div>`
+    : `<div class="avatar user-avatar">👤</div>`;
+
+  const header = role === 'assistant' ? 'FINDY' : 'YOU';
+>>>>>>> 2b04165a5e3fa7dded1b6f4b094d91e67bef4b0c
   const rendered = role === 'assistant' ? renderContent(content) : content.replace(/\n/g, '<br>');
 
   div.innerHTML = `
@@ -209,8 +217,15 @@ async function resetConversation() {
     <div class="message welcome">
       <div class="bubble-header">Ironman AI</div>
       <div class="bubble">
+<<<<<<< HEAD
         <div class="bubble-content">
 Hey there! I'm <strong>Ironman AI</strong> — your assistant. How can I help you today?</div>
+=======
+        <div class="bubble-header">Findy</div>
+        <div class="bubble-content">
+          At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?
+        </div>
+>>>>>>> 2b04165a5e3fa7dded1b6f4b094d91e67bef4b0c
       </div>
     </div>
   `;
