@@ -9,8 +9,11 @@ const logoutBtn = document.getElementById('logout-btn');
 const menuToggle = document.getElementById('menu-toggle');
 const sidebar = document.getElementById('sidebar');
 const convList = document.getElementById('conversations-list');
+const headerTitle = document.getElementById('header-title');
+const chatConnected = document.getElementById('chat-connected');
 
-let sessionId = 'conv_' + Date.now();
+let sessionId = 'findy_' + Date.now();
+let currentMode = 'default';
 let isProcessing = false;
 let abortController = null;
 
@@ -42,12 +45,11 @@ function renderConversationList() {
 }
 
 function switchConversation(index) {
-  // Save current conversation
   if (activeConvIndex >= 0 && conversations[activeConvIndex]) {
     conversations[activeConvIndex].html = messagesContainer.innerHTML;
     conversations[activeConvIndex].sessionId = sessionId;
   }
-  
+
   activeConvIndex = index;
   const conv = conversations[index];
   sessionId = conv.sessionId;
@@ -58,14 +60,13 @@ function switchConversation(index) {
 }
 
 function startNewConversation() {
-  // Save current
   if (activeConvIndex >= 0 && conversations[activeConvIndex]) {
     conversations[activeConvIndex].html = messagesContainer.innerHTML;
     conversations[activeConvIndex].sessionId = sessionId;
   }
 
   const newConv = {
-    sessionId: 'conv_' + Date.now(),
+    sessionId: 'findy_' + Date.now(),
     messages: [],
     html: ''
   };
@@ -85,7 +86,6 @@ menuToggle.addEventListener('click', () => {
   sidebar.classList.toggle('open');
 });
 
-// Close sidebar when clicking outside on mobile
 document.addEventListener('click', (e) => {
   if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== menuToggle) {
     closeSidebar();
@@ -97,14 +97,54 @@ logoutBtn.addEventListener('click', () => {
   window.location.href = '/login.html';
 });
 
-// Auto-resize textarea
+// ---- Mode Switching (Nissan Springs) ----
+chatConnected.addEventListener('click', () => switchMode('connected'));
+
+function switchMode(mode) {
+  currentMode = mode;
+  sessionId = 'findy_' + Date.now();
+
+  document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+  if (mode === 'connected') {
+    chatConnected.classList.add('active');
+    headerTitle.textContent = 'Findy · Nissan Springs';
+    input.placeholder = 'Ask about Nissan Springs, sir...';
+  } else {
+    headerTitle.textContent = 'Findy';
+    input.placeholder = 'Ask me anything, sir...';
+  }
+
+  messagesContainer.innerHTML = getWelcomeHTML(mode);
+  hideTyping();
+  closeSidebar();
+}
+
+function getWelcomeHTML(mode) {
+  if (mode === 'connected') {
+    return `
+      <div class="message welcome">
+        <div class="bubble-header">Findy · Nissan Springs</div>
+        <div class="bubble">
+          <div class="bubble-content">Connected to <strong>Nissan Springs</strong> 🏢 — I've studied their website. Ask me about their vehicles, services, promotions, or anything else about the dealership, sir.</div>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="message welcome">
+      <div class="bubble-header">Findy</div>
+      <div class="bubble">
+        <div class="bubble-content">At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?</div>
+      </div>
+    </div>`;
+}
+
+// ---- Auto-resize textarea ----
 input.addEventListener('input', () => {
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 120) + 'px';
   sendBtn.disabled = !input.value.trim();
 });
 
-// Send on Enter (Shift+Enter for newline)
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -117,28 +157,19 @@ resetBtn.addEventListener('click', resetConversation);
 
 // ---- Markdown-ish renderer ----
 function renderContent(text) {
-  // Escape HTML first
   let html = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Code blocks (```...```)
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
     const langClass = lang ? ` class="language-${lang}"` : '';
     return `<pre><code${langClass}>${htmlEscape(code.trim())}</code></pre>`;
   });
 
-  // Inline code
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Bold
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-  // Italic
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-  // Line breaks
   html = html.replace(/\n/g, '<br>');
 
   return html;
@@ -164,7 +195,6 @@ function addMessage(role, content, isStreaming = false) {
   `;
 
   if (isStreaming) {
-    // Find existing streaming message or add new
     const existing = messagesContainer.querySelector('.message.streaming');
     if (existing) {
       existing.querySelector('.bubble-content').innerHTML = rendered;
@@ -198,11 +228,8 @@ async function sendMessage() {
   sendBtn.disabled = true;
   isProcessing = true;
 
-  // Add user message
   addMessage('user', text);
   trackMessage(text);
-
-  // Show typing indicator
   showTyping();
 
   abortController = new AbortController();
@@ -211,7 +238,7 @@ async function sendMessage() {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, sessionId }),
+      body: JSON.stringify({ message: text, sessionId, mode: currentMode }),
       signal: abortController.signal,
     });
 
@@ -226,7 +253,6 @@ async function sendMessage() {
 
     hideTyping();
 
-    // Read the stream
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -264,7 +290,6 @@ async function sendMessage() {
       }
     }
 
-    // Final render
     if (assistantMsg) {
       assistantMsg.querySelector('.bubble-content').innerHTML = renderContent(fullContent);
     }
@@ -292,19 +317,12 @@ async function resetConversation() {
     body: JSON.stringify({ sessionId }),
   });
 
-  // Start a new conversation
   startNewConversation();
+  currentMode = 'default';
+  headerTitle.textContent = 'Findy';
+  input.placeholder = 'Ask me anything, sir...';
 
-  // Clear messages and re-add welcome
-  messagesContainer.innerHTML = `
-    <div class="message welcome">
-      <div class="bubble-header">Findy</div>
-      <div class="bubble">
-        <div class="bubble-content">At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?</div>
-      </div>
-    </div>
-  `;
-
+  messagesContainer.innerHTML = getWelcomeHTML('default');
   hideTyping();
   sendBtn.disabled = true;
   closeSidebar();
@@ -320,7 +338,6 @@ function trackMessage(text) {
 }
 
 // ---- Init ----
-// Create initial conversation if none exists
 if (conversations.length === 0) {
   startNewConversation();
 } else {
