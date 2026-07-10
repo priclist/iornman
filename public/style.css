@@ -72,6 +72,37 @@ body {
   overflow-y: auto;
 }
 
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 16px 16px 6px;
+}
+
+.badge-connected {
+  margin-left: auto;
+  color: var(--success);
+  font-size: 10px;
+  animation: pulse-core 2s ease-in-out infinite;
+}
+
+.biz-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.conv-item.business-item.active {
+  border-left-color: var(--success);
+}
+
+.conv-item.business-item.active .biz-icon {
+  color: var(--success);
+}
+
 .conv-item {
   display: flex;
   align-items: center;
@@ -237,7 +268,7 @@ body {
   justify-content: center;
 }
 
-.ironman-avatar {
+.findy-avatar {
   background: radial-gradient(circle at 40% 35%, #1a0a0a, var(--iron-red));
   border: 1px solid var(--iron-gold);
 }
