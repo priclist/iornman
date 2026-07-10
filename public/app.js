@@ -70,7 +70,7 @@ function addMessage(role, content, isStreaming = false) {
     ? `<div class="avatar ironman-avatar"><div class="mini-reactor"><div class="mr-ring"></div><div class="mr-core"></div></div></div>`
     : `<div class="avatar user-avatar">👤</div>`;
 
-  const header = role === 'assistant' ? 'IRONMAN AI' : 'YOU';
+  const header = role === 'assistant' ? 'FINDY' : 'YOU';
   const rendered = role === 'assistant' ? renderContent(content) : content.replace(/\n/g, '<br>');
 
   div.innerHTML = `
@@ -219,10 +219,9 @@ async function resetConversation() {
         </div>
       </div>
       <div class="bubble">
-        <div class="bubble-header">Ironman AI</div>
+        <div class="bubble-header">Findy</div>
         <div class="bubble-content">
-          Hey there. I'm <strong>Ironman</strong> 🦾 — your AI with a genius streak, built-in snark, 
-          and a metaphorical reactor in my chest. What can I help you build, break, or figure out today?
+          At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?
         </div>
       </div>
     </div>

@@ -30,27 +30,24 @@ const GATEWAY_TOKEN = (() => {
  }
 })();
 
+// Disable caching for dev
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+  }
+  next();
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-// Session store: maps sessionId -> array of messages
-const sessions = {};
-
-// Proxy endpoint for chat
+// Proxy endpoint for chat — uses its own stable session
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId } = req.body;
   if (!message) return res.status(400).json({ error: 'message is required' });
 
-  const sid = sessionId || 'default';
-  if (!sessions[sid]) sessions[sid] = [];
+  const userKey = sessionId || 'ironman-webapp';
 
-  // Add user message to session
-  sessions[sid].push({ role: 'user', content: message });
-
-  // Build conversation history for the API (last 20 messages to stay under context)
-  const history = sessions[sid].slice(-20);
-
-  // Set up SSE or streaming response to client
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -65,18 +62,20 @@ app.post('/api/chat', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'openclaw/default',
-        messages: history,
+        messages: [
+          { role: 'system', content: 'Your name is Findy. You are a helpful, sharp, witty assistant. Always address the user as "sir". Keep responses concise and direct. You have a confident personality but remain respectful.' },
+          { role: 'user', content: message }
+        ],
         stream: true,
         max_tokens: 4096,
+        user: userKey,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
       console.error('❌ Gateway API error:', response.status, errText);
-      const errMsg = `API Error (${response.status}): ${errText}`;
-      sessions[sid].push({ role: 'assistant', content: errMsg });
-      res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: `API Error (${response.status}): ${errText}` })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       return;
@@ -85,7 +84,6 @@ app.post('/api/chat', async (req, res) => {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let fullResponse = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -98,42 +96,16 @@ app.post('/api/chat', async (req, res) => {
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         const data = line.slice(6).trim();
-        if (data === '[DONE]') {
-          res.write('data: [DONE]\n\n');
-          continue;
-        }
+        if (data === '[DONE]') { res.write('data: [DONE]\n\n'); continue; }
 
         try {
           const parsed = JSON.parse(data);
           const content = parsed.choices?.[0]?.delta?.content || '';
           if (content) {
-            fullResponse += content;
-            res.write(`data: ${JSON.stringify({ content })}\n\n`);
-          }
-        } catch {
-          // skip malformed JSON
-        }
-      }
-    }
-
-    // Process any remaining buffer
-    if (buffer.startsWith('data: ')) {
-      const data = buffer.slice(6).trim();
-      if (data !== '[DONE]') {
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed.choices?.[0]?.delta?.content || '';
-          if (content) {
-            fullResponse += content;
             res.write(`data: ${JSON.stringify({ content })}\n\n`);
           }
         } catch {}
       }
-    }
-
-    // Store assistant response
-    if (fullResponse) {
-      sessions[sid].push({ role: 'assistant', content: fullResponse });
     }
 
     res.write('data: [DONE]\n\n');
@@ -147,25 +119,12 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Reset conversation
-app.post('/api/reset', (req, res) => {
-  const { sessionId } = req.body;
-  if (sessionId && sessions[sessionId]) {
-    delete sessions[sessionId];
-  } else {
-    Object.keys(sessions).forEach(k => delete sessions[k]);
-  }
-  res.json({ ok: true });
-});
-
 // Diagnostic endpoint
 app.get('/api/status', (req, res) => {
-  const testToken = GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,12) + '…' : 'EMPTY';
   res.json({
     status: 'ok',
     gatewayUrl: GATEWAY_URL,
-    tokenPrefix: testToken,
-    sessions: Object.keys(sessions).length,
+    tokenPrefix: GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,12) + '…' : 'EMPTY',
     nodeVersion: process.version,
     uptime: process.uptime().toFixed(0) + 's',
   });
