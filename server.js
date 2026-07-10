@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const homedir = require('os').homedir();
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:18789';
+const SCRAPE_FILE = path.join(__dirname, 'scraped-data.json');
 
 // Read token: env var > config file
 const GATEWAY_TOKEN = (() => {
@@ -29,43 +30,96 @@ const GATEWAY_TOKEN = (() => {
   }
 })();
 
-// System prompts for each mode
+// ──────── WEBSITE SCRAPER ────────
+let scrapedData = { site: 'nissansprings.co.za', pages: {}, scrapedAt: null };
+
+function loadScrapedData() {
+  try {
+    if (fs.existsSync(SCRAPE_FILE)) {
+      scrapedData = JSON.parse(fs.readFileSync(SCRAPE_FILE, 'utf8'));
+      console.log(`📄 Loaded scraped data from ${scrapedData.scrapedAt || 'unknown'}`);
+    } else {
+      console.log('⚠️ No scraped data file found. Run node scraper.js first.');
+    }
+  } catch (err) {
+    console.error('❌ Failed to load scraped data:', err.message);
+  }
+}
+
+// Watch for file changes (auto-refresh when scraper updates)
+try {
+  fs.watchFile(SCRAPE_FILE, { interval: 5000 }, () => {
+    console.log('🔄 Scraped data changed, reloading...');
+    loadScrapedData();
+  });
+} catch {}
+
+loadScrapedData();
+
+// Run scraper every 30 minutes
+const SCRAPE_INTERVAL = 30 * 60 * 1000;
+setInterval(() => {
+  console.log('⏰ Running scheduled scrape...');
+  const { execSync } = require('child_process');
+  try {
+    execSync(`node ${path.join(__dirname, 'scraper.js')}`, { timeout: 30000 });
+    loadScrapedData();
+  } catch (err) {
+    console.error('❌ Scheduled scrape failed:', err.message);
+  }
+}, SCRAPE_INTERVAL);
+
+// Build the connected system prompt from live website data
+function buildConnectedPrompt() {
+  const pages = scrapedData.pages || {};
+  const home = (pages['/'] || '').substring(0, 2000);
+  const promos = (pages['/promotion/'] || '').substring(0, 1500);
+  const preowned = (pages['/pre-owned-promotions/'] || '').substring(0, 1000);
+  const contact = (pages['/contact-us/'] || '').substring(0, 1000);
+  const np200 = (pages['/nissan-np200/'] || '').substring(0, 1500);
+  const navara = (pages['/new-nissan-navara/'] || '').substring(0, 1500);
+  const xtrail = (pages['/all-new-nissan-x-trail/'] || '').substring(0, 1500);
+
+  return `Your name is Findy. You are a helpful, sharp, witty assistant. Always address the user as "sir". Keep responses concise and direct.
+
+You are a business AI assistant for Nissan Springs (https://nissansprings.co.za), a Nissan dealership in Springs, South Africa.
+
+Website information (auto-refreshed):
+
+[HOME PAGE]
+${home}
+
+[NEW VEHICLE PROMOTIONS]
+${promos}
+
+[PRE-OWNED VEHICLES]
+${preowned}
+
+[NISSAN NP200]
+${np200}
+
+[NISSAN NAVARA]
+${navara}
+
+[NISSAN X-TRAIL]
+${xtrail}
+
+[CONTACT DETAILS]
+${contact}
+
+Data refreshed: ${scrapedData.scrapedAt || 'N/A'}
+
+RULES:
+- Only answer based on the website information provided above.
+- If the information isn't in the data above, say "I don't have that information, sir. Would you like me to help you contact Nissan Springs directly?"
+- Be honest and accurate — no guessing or making up details.`;
+}
+
 const PROMPTS = {
   default: `Your name is Findy. You are a helpful, sharp, witty assistant. Always address the user as "sir". Keep responses concise and direct. You have a confident personality but remain respectful.`,
-
-  connected: `Your name is Findy. You are a helpful, sharp, witty assistant. Always address the user as "sir". Keep responses concise and direct. You have a confident personality but remain respectful.
-
-You are also a business AI assistant for Nissan Springs, a Nissan dealership in Springs, South Africa.
-
-BUSINESS INFORMATION:
-- Dealership: Nissan Springs (https://nissansprings.co.za)
-- Location: Springs, South Africa
-
-VEHICLES (New):
-- Nissan NP200 (reliable bakkie/pickup)
-- Nissan Navara (superior pickup for work and play)
-- Nissan X-Trail (adventurous SUV)
-- Various sedans, SUVs, and crossovers
-
-SERVICES:
-- Browse new vehicles
-- Browse pre-owned/used vehicles
-- Sell your vehicle
-- Book a test drive
-- Book a vehicle service
-- Walk-in express service
-- Special offers & promotions
-- Apply for finance (credit approval required, T&Cs apply)
-- Enquire about parts
-- Contact the dealership
-
-PROMOTIONS:
-- New Vehicle Promotions with limited-time discounts and finance offers
-- Pre-Owned Promotions: Currently no active promotions
-
-When answering questions about Nissan Springs, be knowledgeable about their vehicles, services, and promotions. If asked about something you don't know, offer to help the customer get in touch with the dealership directly.`
 };
 
+// ──────── MIDDLEWARE ────────
 app.use((req, res, next) => {
   if (req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.html')) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -76,13 +130,16 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-// Chat endpoint — supports mode switching
+// ──────── CHAT ENDPOINT ────────
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, mode } = req.body;
   if (!message) return res.status(400).json({ error: 'message is required' });
 
   const userKey = sessionId || 'findy-webapp';
-  const systemPrompt = PROMPTS[mode] || PROMPTS.default;
+  // Build connected prompt fresh each time (reflects latest scraped data)
+  const systemPrompt = mode === 'connected' ? buildConnectedPrompt() : PROMPTS.default;
+
+  console.log(`💬 [${mode}] "${message.substring(0,50)}..."`);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -155,17 +212,22 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// ──────── STATUS ────────
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'ok',
     gatewayUrl: GATEWAY_URL,
     tokenPrefix: GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,12) + '…' : 'EMPTY',
+    scrapedAt: scrapedData.scrapedAt,
+    pagesScraped: Object.keys(scrapedData.pages || {}).length,
     nodeVersion: process.version,
     uptime: process.uptime().toFixed(0) + 's',
   });
 });
 
+// ──────── START ────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🦾 Findy AI Chat running on http://0.0.0.0:${PORT}`);
   console.log(`   Proxying to Gateway at ${GATEWAY_URL}`);
+  console.log(`   Auto-scraping nissansprings.co.za every ${SCRAPE_INTERVAL/60000} minutes`);
 });
