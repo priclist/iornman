@@ -3,16 +3,32 @@ const app = express();
 const PORT = 3456;
 
 // Gateway config — reads from env or auto-discovers from OpenClaw config
-const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const homedir = require('os').homedir();
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:18789';
-const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || (() => {
-  try {
-    const cfg = JSON.parse(execSync('cat ~/.openclaw/openclaw.json').toString());
-    return cfg.gateway?.auth?.token || '';
-  } catch { return ''; }
-})();
 
-console.log(`🔑 Token loaded: ${GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,10)+'…' : 'EMPTY!'}`);
+// Read token: env var > config file
+const GATEWAY_TOKEN = (() => {
+  if (process.env.OPENCLAW_GATEWAY_TOKEN) {
+    console.log('🔑 Using token from env var');
+    return process.env.OPENCLAW_GATEWAY_TOKEN;
+  }
+  try {
+    const cfgPath = path.join(homedir, '.openclaw', 'openclaw.json');
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    const token = cfg.gateway?.auth?.token;
+    if (token) {
+      console.log(`🔑 Token loaded from ${cfgPath}: ${token.substring(0,12)}…`);
+      return token;
+    }
+    console.error('❌ No token found in config');
+    return '';
+  } catch (err) {
+    console.error('❌ Failed to read token from config:', err.message);
+    return '';
+ }
+})();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
@@ -57,8 +73,10 @@ app.post('/api/chat', async (req, res) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      sessions[sid].push({ role: 'assistant', content: `Error: ${errText}` });
-      res.write(`data: ${JSON.stringify({ error: errText })}\n\n`);
+      console.error('❌ Gateway API error:', response.status, errText);
+      const errMsg = `API Error (${response.status}): ${errText}`;
+      sessions[sid].push({ role: 'assistant', content: errMsg });
+      res.write(`data: ${JSON.stringify({ error: errMsg })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       return;
@@ -122,8 +140,8 @@ app.post('/api/chat', async (req, res) => {
     res.end();
 
   } catch (err) {
-    console.error('Proxy error:', err);
-    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    console.error('❌ Proxy error:', err.message);
+    res.write(`data: ${JSON.stringify({ error: 'Server error: ' + err.message })}\n\n`);
     res.write('data: [DONE]\n\n');
     res.end();
   }
@@ -138,6 +156,19 @@ app.post('/api/reset', (req, res) => {
     Object.keys(sessions).forEach(k => delete sessions[k]);
   }
   res.json({ ok: true });
+});
+
+// Diagnostic endpoint
+app.get('/api/status', (req, res) => {
+  const testToken = GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,12) + '…' : 'EMPTY';
+  res.json({
+    status: 'ok',
+    gatewayUrl: GATEWAY_URL,
+    tokenPrefix: testToken,
+    sessions: Object.keys(sessions).length,
+    nodeVersion: process.version,
+    uptime: process.uptime().toFixed(0) + 's',
+  });
 });
 
 app.listen(PORT, '0.0.0.0', () => {
