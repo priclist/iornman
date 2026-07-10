@@ -6,18 +6,14 @@
   <title>Ironman AI</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
     <aside id="sidebar">
       <div class="sidebar-header">
-        <div class="arc-reactor-small">
-          <div class="reactor-ring"></div>
-          <div class="reactor-core"></div>
-        </div>
-        <h2>IRONMAN</h2>
-        <span class="status-badge online">● ONLINE</span>
+        <h2>Ironman AI</h2>
+        <span class="status-badge online">● Online</span>
       </div>
       <div class="conversations">
         <div class="conv-item active">
@@ -30,7 +26,7 @@
           <span>⟳</span> New Conversation
         </button>
         <div class="system-info">
-          <span>v1.0 • J.A.R.V.I.S. Protocol</span>
+          <span>v1.0</span>
         </div>
       </div>
     </aside>
@@ -41,12 +37,6 @@
           <div id="menu-toggle">☰</div>
           <div class="header-info">
             <h1>Ironman AI</h1>
-            <p class="subtitle">Powered by DeepSeek V4 · Smart · Fast · Reliable</p>
-          </div>
-        </div>
-        <div class="header-right">
-          <div class="header-stats">
-            <span class="stat">● Ready</span>
           </div>
         </div>
       </header>
@@ -54,28 +44,13 @@
       <div id="chat-container">
         <div id="messages">
           <div class="message welcome">
-            <div class="avatar ironman-avatar">
-              <div class="mini-reactor">
-                <div class="mr-ring"></div>
-                <div class="mr-core"></div>
-              </div>
-            </div>
+            <div class="bubble-header">Ironman AI</div>
             <div class="bubble">
-              <div class="bubble-header">Ironman AI</div>
-              <div class="bubble-content">
-                Hey there. I'm <strong>Ironman</strong> 🦾 — your AI with a genius streak, built-in snark, 
-                and a metaphorical reactor in my chest. What can I help you build, break, or figure out today?
-              </div>
+              <div class="bubble-content">Hey there! I'm <strong>Ironman AI</strong> — your assistant. How can I help you today?</div>
             </div>
           </div>
         </div>
         <div id="typing-indicator" class="hidden">
-          <div class="avatar ironman-avatar">
-            <div class="mini-reactor typing">
-              <div class="mr-ring"></div>
-              <div class="mr-core"></div>
-            </div>
-          </div>
           <div class="typing-dots">
             <span></span><span></span><span></span>
           </div>
@@ -86,12 +61,12 @@
         <div class="input-wrapper">
           <textarea id="chat-input" rows="1" placeholder="Ask me anything..."></textarea>
           <button id="send-btn" disabled>
-            <svg viewBox="0 0 24 24" width="20" height="20">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5"></line>
+              <polyline points="5 12 12 5 19 12"></polyline>
             </svg>
           </button>
         </div>
-        <p class="input-hint">Ironman AI can make mistakes. Verify important info.</p>
       </div>
     </main>
   </div>

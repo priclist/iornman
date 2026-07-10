@@ -66,17 +66,12 @@ function addMessage(role, content, isStreaming = false) {
   const div = document.createElement('div');
   div.className = `message ${role}`;
 
-  const avatar = role === 'assistant'
-    ? `<div class="avatar ironman-avatar"><div class="mini-reactor"><div class="mr-ring"></div><div class="mr-core"></div></div></div>`
-    : `<div class="avatar user-avatar">👤</div>`;
-
-  const header = role === 'assistant' ? 'IRONMAN AI' : 'YOU';
+  const header = role === 'assistant' ? 'Ironman AI' : '';
   const rendered = role === 'assistant' ? renderContent(content) : content.replace(/\n/g, '<br>');
 
   div.innerHTML = `
-    ${avatar}
+    ${header ? `<div class="bubble-header">${header}</div>` : ''}
     <div class="bubble">
-      <div class="bubble-header">${header}</div>
       <div class="bubble-content">${rendered}</div>
     </div>
   `;
@@ -212,18 +207,10 @@ async function resetConversation() {
   // Clear messages and re-add welcome
   messagesContainer.innerHTML = `
     <div class="message welcome">
-      <div class="avatar ironman-avatar">
-        <div class="mini-reactor">
-          <div class="mr-ring"></div>
-          <div class="mr-core"></div>
-        </div>
-      </div>
+      <div class="bubble-header">Ironman AI</div>
       <div class="bubble">
-        <div class="bubble-header">Ironman AI</div>
         <div class="bubble-content">
-          Hey there. I'm <strong>Ironman</strong> 🦾 — your AI with a genius streak, built-in snark, 
-          and a metaphorical reactor in my chest. What can I help you build, break, or figure out today?
-        </div>
+Hey there! I'm <strong>Ironman AI</strong> — your assistant. How can I help you today?</div>
       </div>
     </div>
   `;
