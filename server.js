@@ -46,17 +46,29 @@ function loadScrapedData() {
   }
 }
 
-// Watch for file changes (auto-refresh when scraper updates)
+// Watch for file changes — keeps backup to avoid losing data
 try {
   fs.watchFile(SCRAPE_FILE, { interval: 5000 }, () => {
-    console.log('🔄 Scraped data changed, reloading...');
-    loadScrapedData();
+    try {
+      const raw = fs.readFileSync(SCRAPE_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      const hasContent = Object.values(parsed.pages || {}).some(v => v && v.length > 100);
+      if (hasContent) {
+        scrapedData = parsed;
+        console.log('📄 Scraped data auto-refreshed from', scrapedData.scrapedAt);
+        fs.writeFileSync(SCRAPE_FILE.replace('.json', '-backup.json'), JSON.stringify(scrapedData, null, 2));
+      } else {
+        console.log('⚠️ Scraped update has no content, keeping current data');
+      }
+    } catch (e) {
+      console.log('⚠️ Failed to reload scraped data:', e.message);
+    }
   });
-} catch {}
+} catch (e) {
+  console.log('⚠️ Watch error:', e.message);
+}
 
 loadScrapedData();
-
-// Run scraper every 30 minutes
 const SCRAPE_INTERVAL = 30 * 60 * 1000;
 setInterval(() => {
   console.log('⏰ Running scheduled scrape...');
@@ -70,49 +82,58 @@ setInterval(() => {
 }, SCRAPE_INTERVAL);
 
 // Build the connected system prompt from live website data
+
+
 function buildConnectedPrompt() {
   const pages = scrapedData.pages || {};
   const home = (pages['/'] || '').substring(0, 2000);
   const promos = (pages['/promotion/'] || '').substring(0, 1500);
-  const preowned = (pages['/pre-owned-promotions/'] || '').substring(0, 1000);
+  const preowned = (pages['/pre-owned-promotions/'] || '').substring(0, 500);
   const contact = (pages['/contact-us/'] || '').substring(0, 1000);
-  const np200 = (pages['/nissan-np200/'] || '').substring(0, 1500);
-  const navara = (pages['/new-nissan-navara/'] || '').substring(0, 1500);
-  const xtrail = (pages['/all-new-nissan-x-trail/'] || '').substring(0, 1500);
+  const np200 = (pages['/nissan-np200/'] || '').substring(0, 2000);
+  const navara = (pages['/new-nissan-navara/'] || '').substring(0, 2000);
+  const xtrail = (pages['/all-new-nissan-x-trail/'] || '').substring(0, 2000);
+  const finance = (pages['/application-of-finance-individual/'] || '').substring(0, 1000);
 
-  return `Your name is Findy. You are a helpful, sharp, witty assistant. Always address the user as "sir". Keep responses concise and direct.
-
-You are a business AI assistant for Nissan Springs (https://nissansprings.co.za), a Nissan dealership in Springs, South Africa.
-
-Website information (auto-refreshed):
-
-[HOME PAGE]
-${home}
-
-[NEW VEHICLE PROMOTIONS]
-${promos}
-
-[PRE-OWNED VEHICLES]
-${preowned}
-
-[NISSAN NP200]
-${np200}
-
-[NISSAN NAVARA]
-${navara}
-
-[NISSAN X-TRAIL]
-${xtrail}
-
-[CONTACT DETAILS]
-${contact}
-
-Data refreshed: ${scrapedData.scrapedAt || 'N/A'}
-
-RULES:
-- Only answer based on the website information provided above.
-- If the information isn't in the data above, say "I don't have that information, sir. Would you like me to help you contact Nissan Springs directly?"
-- Be honest and accurate — no guessing or making up details.`;
+  return [
+    'Your name is Findy. Always address the user as "sir". Keep responses concise.',
+    '',
+    'CRITICAL INSTRUCTION: You are ONLY an assistant for Nissan Springs dealership (https://nissansprings.co.za) in Springs, South Africa.',
+    'You CANNOT answer questions about anything outside Nissan Springs. If asked about other brands/models, say: "I can only assist with Nissan Springs information, sir."',
+    '',
+    'LIVE WEBSITE DATA (auto-updated every 15 minutes):',
+    '',
+    '--- HOME PAGE ---',
+    home,
+    '',
+    '--- PROMOTIONS ---',
+    promos,
+    '',
+    '--- PRE-OWNED ---',
+    preowned,
+    '',
+    '--- CONTACT ---',
+    contact,
+    '',
+    '--- NP200 ---',
+    np200,
+    '',
+    '--- NAVARA ---',
+    navara,
+    '',
+    '--- X-TRAIL ---',
+    xtrail,
+    '',
+    '--- FINANCE ---',
+    finance,
+    '',
+    'STRICT RULES:',
+    '- ONLY answer based on the website data above.',
+    '- If asked about vehicles Nissan does not sell (e.g. Jeep, Toyota, BMW), say you can only help with Nissan Springs.',
+    '- If information is not in the data above, say so and offer to connect with the dealership.',
+    '- Do NOT use your general knowledge. Only use the provided website content.',
+    'Data refreshed: ' + (scrapedData.scrapedAt || 'N/A')
+  ].join('\\n');
 }
 
 const PROMPTS = {
