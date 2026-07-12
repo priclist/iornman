@@ -98,7 +98,19 @@ function searchKB(query, topK = 10) {
       score += Math.min(textCount * 2, 100);
     }
 
-    if (page.url && page.url.includes('/product/')) score += 5;
+    // 🚗 Boost product/vehicle pages heavily — they have the real spec data
+    if (page.url && page.url.includes('/product/')) {
+      score += 80;
+      // Extra boost if query is about vehicles (mileage, price, colour, etc.)
+      const vehicleTerms = ['mileage','price','colour','color','transmission','fuel','used','pre.owned','preowned','car','cars','vehicle','vehicles','stock','kilometre','km','automatic','manual','diesel','petrol'];      
+      const isVehicleQuery = vehicleTerms.some(vt => query.toLowerCase().includes(vt));
+      if (isVehicleQuery) score += 40;
+    }
+
+    // Boost pages that contain structured spec data
+    if ((page.meta?.mileage || page.meta?.price || page.meta?.transmission || page.meta?.colour)) {
+      score += 30;
+    }
 
     return { page, score };
   })
