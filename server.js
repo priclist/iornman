@@ -54,12 +54,15 @@ loadKB();
 // Watch for KB file changes
 try {
   fs.watchFile(KB_FILE, { interval: 10000 }, () => {
-    const raw = fs.readFileSync(KB_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 10) {
-      kb.pages = parsed;
-      console.log(`KB auto-refreshed: ${kb.pages.length} pages`);
-    }
+    try {
+      if (!fs.existsSync(KB_FILE)) return;
+      const raw = fs.readFileSync(KB_FILE, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 10) {
+        kb.pages = parsed;
+        console.log(`KB auto-refreshed: ${kb.pages.length} pages`);
+      }
+    } catch(e) { console.log('Watch error:', e.message); }
   });
 } catch(e) { console.log('Watch error:', e.message); }
 
@@ -178,6 +181,17 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '10mb' }));
+
+// Always redirect root to login page
+app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
+
+// Chat UI route
+app.get('/chat', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.use(express.static('public'));
 
 const NON_NISSAN_KEYWORDS = ['jeep','toyota','bmw','mercedes','audi','volkswagen','vw','honda','ford',

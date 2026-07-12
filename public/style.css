@@ -44,13 +44,16 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
-.sidebar-header h2 {
-  font-family: 'Inter', -apple-system, sans-serif;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--text-primary);
-  margin: 0 0 4px;
+.brand-logo {
+  max-width: 140px;
+  height: auto;
+  margin: 0 auto 6px;
+}
+
+.header-logo {
+  max-height: 40px;
+  width: auto;
+  max-width: 180px;
 }
 
 /* Hide arc reactor decorations */
@@ -96,7 +99,7 @@ body {
 }
 
 .source-item:hover {
-  background: #ECECF1;
+  background: #2a2a2a;
 }
 
 .source-logo {
@@ -104,7 +107,7 @@ body {
   height: 20px;
   border-radius: 4px;
   object-fit: contain;
-  background: #f0f0f0;
+  background: #1a1a1a;
 }
 
 .conversations {
@@ -156,8 +159,8 @@ body {
   transition: background 0.15s;
 }
 
-.conv-item:hover { background: #ECECF1; color: var(--text-primary); }
-.conv-item.active { background: #ECECF1; color: var(--text-primary); border-left: none; font-weight: 500; }
+.conv-item:hover { background: #2a2a2a; color: var(--text-primary); }
+.conv-item.active { background: #2a2a2a; color: var(--text-primary); border-left: none; font-weight: 500; }
 
 .sidebar-footer {
   padding: 12px;
@@ -167,7 +170,7 @@ body {
 .reset-btn {
   width: 100%;
   padding: 10px;
-  background: var(--bg-primary);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: var(--radius-sm);
@@ -181,7 +184,7 @@ body {
   gap: 6px;
 }
 
-.reset-btn:hover { background: #ECECF1; border-color: #d0d0d0; }
+.reset-btn:hover { background: #2a2a2a; border-color: #444444; }
 
 .system-info {
   margin-top: 10px;

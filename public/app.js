@@ -107,10 +107,10 @@ function switchMode(mode) {
   document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
   if (mode === 'connected') {
     chatConnected.classList.add('active');
-    headerTitle.textContent = 'Findy · Nissan Springs';
+    if (headerTitle) headerTitle.textContent = 'Nissan Springs';
     input.placeholder = 'Ask about Nissan Springs, sir...';
   } else {
-    headerTitle.textContent = 'Findy';
+    if (headerTitle) headerTitle.textContent = 'Nissan Springs AI';
     input.placeholder = 'Ask me anything, sir...';
   }
 
@@ -123,17 +123,17 @@ function getWelcomeHTML(mode) {
   if (mode === 'connected') {
     return `
       <div class="message welcome">
-        <div class="bubble-header">Findy · Nissan Springs</div>
+        <div class="bubble-header">Nissan Springs</div>
         <div class="bubble">
-          <div class="bubble-content">Connected to <strong>Nissan Springs</strong> 🏢 — I've studied their website. Ask me about their vehicles, services, promotions, or anything else about the dealership, sir.</div>
+          <div class="bubble-content">Connected to <strong>Nissan Springs</strong>. Ask me about their vehicles, services, promotions, or anything else about the dealership, sir.</div>
         </div>
       </div>`;
   }
   return `
     <div class="message welcome">
-      <div class="bubble-header">Findy</div>
+      <div class="bubble-header">Nissan Springs AI</div>
       <div class="bubble">
-        <div class="bubble-content">At your service, sir. I'm <strong>Findy</strong> — ready to help with whatever you need. What can I do for you?</div>
+        <div class="bubble-content">At your service, sir. I'm <strong>Nissan Springs AI</strong> — ready to help with whatever you need. What can I do for you?</div>
       </div>
     </div>`;
 }
@@ -319,7 +319,7 @@ async function resetConversation() {
 
   startNewConversation();
   currentMode = 'default';
-  headerTitle.textContent = 'Findy';
+  if (headerTitle) headerTitle.textContent = 'Nissan Springs AI';
   input.placeholder = 'Ask me anything, sir...';
 
   messagesContainer.innerHTML = getWelcomeHTML('default');
