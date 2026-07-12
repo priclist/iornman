@@ -13,7 +13,7 @@ const path = require('path');
 const homedir = require('os').homedir();
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:18789';
 
-const TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || (function() {
+const TOKEN = proces…OKEN || (function() {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(homedir,'.openclaw','openclaw.json'),'utf8'));
     const t = cfg.gateway?.auth?.token;
@@ -22,11 +22,19 @@ const TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || (function() {
   return '';
 })();
 
-const GATEWAY_TOKEN = TOKEN;
+const GATEWAY_TOKEN = ***
 const KB_DIR = path.join(__dirname, 'kb', 'data');
 const KB_FILE = path.join(KB_DIR, 'knowledge-base.json');
 const INDEX_FILE = path.join(KB_DIR, 'index.json');
 const META_FILE = path.join(KB_DIR, 'meta.json');
+
+// ─── Source Scrapers ───
+let sourceScrapers = null;
+try {
+  sourceScrapers = require('./scrapers/sources');
+} catch(e) {
+  console.log('Source scrapers not available:', e.message);
+}
 
 // ─── Knowledge Base Loader ───
 let kb = { pages: [], index: {}, meta: { totalPages: 0, totalWords: 0, scrapedAt: null } };
@@ -84,10 +92,9 @@ function searchKB(query, topK = 10) {
       const titleCount = (title.split(term).length - 1);
       score += titleCount * 10;
       const textCount = (text.split(term).length - 1);
-      score += Math.min(textCount * 2, 100);  // cap text score
+      score += Math.min(textCount * 2, 100);
     }
 
-    // Boost for product pages
     if (page.url && page.url.includes('/product/')) score += 5;
 
     return { page, score };
@@ -99,16 +106,39 @@ function searchKB(query, topK = 10) {
   return scored;
 }
 
+// ─── KB-aware off-topic check ───
+// Nissan Springs sells pre-owned vehicles from MANY brands (Audi, BMW, VW, etc.)
+// Only block brands that are genuinely NOT on their lot.
+function isTrulyOffTopic(query) {
+  const rareBrands = ['jeep','ferrari','lamborghini','acura','citroen','hino',
+    'scania','man','iveco','daf','foton','geely','gac','jac','jmc','ldv','lepas',
+    'proton','dongfeng','changan','alfaromeo','alfa romeo'];
+  const lower = query.toLowerCase();
+
+  // Clearly non-car topics
+  const nonCar = ['recipe','cook','weather','movie','song','sport','game',
+    'math','homework','code','write a','draft','email','poem'];
+  if (nonCar.some(k => lower.includes(k))) return true;
+
+  // Rare brands: only block if NOT found in KB
+  for (const brand of rareBrands) {
+    if (lower.includes(brand)) {
+      const inKB = kb.pages.some(p => (p.textPlain || '').toLowerCase().includes(brand));
+      if (!inKB) return true;
+    }
+  }
+  return false;
+}
+
 // ─── Build Connected Prompt ───
 function buildConnectedPrompt(query, searchResults) {
   const parts = [];
 
   parts.push('Your name is Findy. Always address the user as "sir". Keep responses concise and natural.');
   parts.push('');
-  parts.push('CRITICAL: You are ONLY a Nissan Springs dealership assistant. You CANNOT answer anything outside Nissan Springs.');
+  parts.push('IMPORTANT: You are a Nissan Springs dealership assistant. Answer ONLY from the website data below.');
   parts.push('');
 
-  // Add topically-relevant KB pages from search
   if (searchResults.length > 0) {
     parts.push(`LIVE WEBSITE DATA (most relevant to "${query}"):`);
     parts.push('');
@@ -123,8 +153,8 @@ function buildConnectedPrompt(query, searchResults) {
       parts.push('');
     }
 
-    // Add some general context pages too
-    const generalUrls = ['/contact-us', '/workshop', '/promotion', '/new-vehicles'];
+    // Add general context pages too
+    const generalUrls = ['/contact-us', '/workshop', '/promotion', '/new-vehicles', '/pre-owned-vehicles'];
     for (const slug of generalUrls) {
       const found = kb.pages.find(p => p.url && p.url.includes(slug));
       if (found && !searchResults.some(r => r.page.url === found.url)) {
@@ -134,17 +164,15 @@ function buildConnectedPrompt(query, searchResults) {
       }
     }
   } else {
-    // Fallback to general KB overview
+    // Fallback to key pages
     parts.push('LIVE WEBSITE DATA (Nissan Springs):');
     parts.push('');
-
-    // Add key pages
     const keySlugs = ['/', '/contact-us', '/workshop', '/new-nissan-navara', '/nissan-np200',
                       '/all-new-nissan-x-trail', '/nissan-magnite', '/nissan-patrol',
                       '/nissan-almera', '/nissan-qashqai', '/promotion', '/new-vehicles',
                       '/pre-owned-vehicles', '/application-of-finance-individual',
                       '/sell-your-car', '/book-a-test-drive', '/express-service',
-                      '/nissan-genuine-parts', '/nissan-springs-blog', '/navara-vs-np200'];
+                      '/nissan-genuine-parts', '/navara-vs-np200'];
 
     for (const slug of keySlugs) {
       const found = kb.pages.find(p => p.url === `https://nissansprings.co.za${slug}/` ||
@@ -160,9 +188,9 @@ function buildConnectedPrompt(query, searchResults) {
   parts.push('');
   parts.push('STRICT RULES:');
   parts.push('- ONLY answer from the website data provided above.');
-  parts.push('- If the user asks about other car brands or non-Nissan topics, say ONLY: "I can only assist with Nissan Springs information, sir."');
-  parts.push('- If the data above doesn\'t contain the answer, say so honestly and offer to connect with the dealership.');
-  parts.push('- You can suggest visiting https://nissansprings.co.za or calling the dealership for more details.');
+  parts.push('- If the data above does not contain the answer, say so and offer to connect with the dealership.');
+  parts.push('- Nissan Springs sells NEW Nissans AND pre-owned vehicles from many brands (check the data above).');
+  parts.push('- Suggest visiting https://nissansprings.co.za or calling for more details.');
   parts.push(`- Data last refreshed: ${kb.meta.scrapedAt || 'N/A'}`);
   parts.push(`- Total pages scraped: ${kb.meta.totalPages || kb.pages.length}`);
 
@@ -180,13 +208,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-const NON_NISSAN_KEYWORDS = ['jeep','toyota','bmw','mercedes','audi','volkswagen','vw','honda','ford',
-  'chevrolet','hyundai','kia','mazda','suzuki','subaru','volvo','porsche','ferrari','lamborghini',
-  'mitsubishi','peugeot','renault','fiat','jaguar','land rover','dodge','chrysler','lexus','acura',
-  'mini','citroen','opel','mg','gwm','haval','chery','byd','tata','mahindra','isuzu','hino',
-  'scania','man','iveco','daf'];
-
-// ─── API: Search KB directly ───
+// ─── API: KB Search ───
 app.get('/api/search', (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json({ results: [] });
@@ -205,6 +227,28 @@ app.get('/api/search', (req, res) => {
   });
 });
 
+// ─── API: Source Listings ───
+app.get('/api/sources', async (req, res) => {
+  if (!sourceScrapers) return res.status(503).json({ error: 'Source scrapers not initialized' });
+  try {
+    const results = await sourceScrapers.scrapeAllSources();
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/sources/:source', async (req, res) => {
+  if (!sourceScrapers) return res.status(503).json({ error: 'Source scrapers not initialized' });
+  try {
+    const data = await sourceScrapers.scrapeSource(req.params.source);
+    if (!data) return res.status(404).json({ error: 'Source not found' });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── API: Chat ───
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, mode } = req.body;
@@ -215,11 +259,10 @@ app.post('/api/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  // SERVER-SIDE BLOCK for off-topic connected mode questions
+  // KB-aware off-topic check
   if (mode === 'connected') {
-    const lower = message.toLowerCase();
-    const isOffTopic = NON_NISSAN_KEYWORDS.some(k => lower.includes(k));
-    if (isOffTopic) {
+    const offTopic = isTrulyOffTopic(message);
+    if (offTopic) {
       console.log('Blocked off-topic:', message.substring(0,50));
       const reply = 'I can only assist with Nissan Springs information, sir. Please ask about our vehicles, services, or promotions.';
       res.write('data: ' + JSON.stringify({ content: reply }) + '\n\n');
@@ -231,20 +274,9 @@ app.post('/api/chat', async (req, res) => {
 
   const userKey = sessionId || 'findy-webapp';
 
-  // Build context from KB for connected mode
   let systemPrompt;
   if (mode === 'connected') {
     const searchResults = searchKB(message, 10);
-    const queryForBlock = message.toLowerCase();
-
-    // Check if it's off-topic against what's in our KB
-    const kbTerms = new Set();
-    kb.pages.forEach(p => {
-      if (p.textPlain) {
-        tokenize(p.textPlain).forEach(t => kbTerms.add(t));
-      }
-    });
-
     systemPrompt = buildConnectedPrompt(message, searchResults);
   } else {
     systemPrompt = 'Your name is Findy. Always address the user as "sir". Keep responses concise.';
@@ -256,7 +288,7 @@ app.post('/api/chat', async (req, res) => {
     const response = await fetch(GATEWAY_URL + '/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + GATEWAY_TOKEN,
+        'Authorization': '***' + GATEWAY_TOKEN,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -315,7 +347,6 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'ok',
-    tokenPrefix: GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,12) + '...': 'EMPTY',
     scrapedAt: kb.meta.scrapedAt,
     pagesScraped: kb.pages.length,
     indexedTerms: Object.keys(kb.index).length,
@@ -323,11 +354,10 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// ─── API: Vehicle Sources ───
+// ─── API: Nissan Springs Vehicles ───
 app.get('/api/sources', (req, res) => {
   const vehicles = [];
 
-  // Search KB for new vehicle pages
   const newVehicleSlugs = ['nissan-np200', 'new-nissan-navara', 'all-new-nissan-x-trail',
     'nissan-magnite', 'nissan-patrol', 'nissan-almera', 'nissan-qashqai'];
 
@@ -335,7 +365,6 @@ app.get('/api/sources', (req, res) => {
     const page = kb.pages.find(p => p.url && p.url.includes(slug));
     if (page) {
       const txt = page.textPlain || '';
-      const prices = txt.match(/R[\s]?[\d,]+(?:\s*(?:\/mo|per month|monthly|p\/m))?/gi) || [];
       vehicles.push({
         id: slug.replace('nissan-', '').replace('new-', '').replace('all-new-', ''),
         name: page.title ? page.title.replace(' | Nissan Springs', '').trim() : slug,
@@ -346,9 +375,7 @@ app.get('/api/sources', (req, res) => {
     }
   }
 
-  // Get pre-owned vehicle count
   const preOwned = kb.pages.filter(p => p.url && p.url.includes('/product/'));
-  const blogPosts = kb.pages.filter(p => p.url && p.url.includes('/nissan-') && !p.url.includes('/product/') && !p.url.includes('/meet-the-nissan-team'));
 
   res.json({
     source: 'nissansprings.co.za',
@@ -357,13 +384,11 @@ app.get('/api/sources', (req, res) => {
     totalWords: kb.meta.totalWords,
     newVehicles: vehicles,
     preOwnedCount: preOwned.length,
-    blogPosts: blogPosts.length,
   });
 });
 
 // ─── API: Reset ───
 app.post('/api/reset', (req, res) => {
-  // No-op, session handling is stateless
   res.json({ ok: true });
 });
 
