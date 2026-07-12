@@ -6,8 +6,8 @@
  * and writes to data/ as JSON files (one per page) + a combined knowledge base.
  *
  * Usage: node scripts/scrape.js
- *        DRY_RUN=1 node scripts/scrape.js   # preview only, no writes
- *        TIMEOUT=10000 node scripts/scrape.js # custom fetch timeout
+ *        DRY_RUN=1 node scripts/scrape.js
+ *        TIMEOUT=10000 node scripts/scrape.js
  */
 
 import fetch from 'node-fetch';
@@ -35,7 +35,6 @@ const sitemapUrlRx2 = /<loc>([^<]+)<\/loc>/g;
 function extractSitemapUrls(xmlText) {
   const urls = [];
   let m;
-  // Try CDATA wrapped first, then plain <loc>
   const rx = xmlText.includes('<![CDATA[') ? sitemapUrlRx : sitemapUrlRx2;
   while ((m = rx.exec(xmlText)) !== null) {
     urls.push(m[1].trim());
@@ -69,7 +68,8 @@ function extractPageContent(html, url) {
   const h1 = $('h1').first().text().trim();
 
   // Get all main content
-  const mainSelectors = ['main', 'article', '.entry-content', '.post-content',
+  const mainSelectors = ['.elementor-location-single', '.elementor-location-archive',
+                         'main', 'article', '.entry-content', '.post-content',
                          '.page-content', '#primary', '#content', '.content-area',
                          'body'];
   let mainEl = null;
@@ -82,9 +82,9 @@ function extractPageContent(html, url) {
   }
   if (!mainEl) mainEl = $('body');
 
-  // Extract clean text
+  // Extract text blocks with comprehensive selectors
   const textBlocks = [];
-  mainEl.find('h1, h2, h3, h4, h5, h6, p, li, td, th, .price, .woocommerce-Price-amount, dt, dd, .product-title, .description, .stock, .sku, .product_meta, .elementor-heading-title').each((i, el) => {
+  mainEl.find('.elementor-heading-title, h1, h2, h3, h4, h5, h6, p, li, td, th, .price, .woocommerce-Price-amount, dt, dd, .product-title, .description, .stock, .sku, .product_meta, .woocommerce-product-attributes th, .woocommerce-product-attributes td, .woocommerce-product-attributes-item__label, .woocommerce-product-attributes-item__value, [data-name], .single-product .entry-summary, .single-product .summary, .product-attribute, .attribute-label, .attribute-value, .spec-item, .spec-label, .spec-value, .vehicle-specs, .vehicle-spec, .car-detail, .car-details, [data-spec], [data-attribute], #tab-description p, span, strong, b, div.product_meta, div.woocommerce-product-details__short-description, .elementor-widget-container').each((i, el) => {
     const tag = $(el).prop('tagName')?.toLowerCase() || '';
     const text = $(el).text().trim();
     if (!text || text.length < 2) return;
@@ -104,9 +104,28 @@ function extractPageContent(html, url) {
     deduped.push(block);
   }
 
+  // Additional pass for product pages: capture all visible structured content
+  if (url.includes('/product/')) {
+    const allVisible = [];
+    $('body').find('*').each((i, el) => {
+      const tag = $(el).prop('tagName')?.toLowerCase() || '';
+      if (['script','style','noscript','iframe','svg','meta','link'].includes(tag)) return;
+      const text = $(el).text().trim();
+      if (!text || text.length < 2) return;
+      // Only capture leaf elements (no children that would duplicate text)
+      if ($(el).children().length === 0 || (tag === 'td' || tag === 'th' || tag === 'span' || tag === 'strong' || tag === 'b' || tag === 'div' || tag === 'p')) {
+        const parentText = $(el).parent().text().trim();
+        if (parentText === text) return; // skip if parent already captured this
+        if (!deduped.some(b => b.text === text)) {
+          deduped.push({ type: 'text', text });
+        }
+      }
+    });
+  }
+
   // Extract meta info
   const meta = {};
-  
+
   // Price
   const priceEl = $('.price .woocommerce-Price-amount, .price .amount, .product-price .amount, .current-price');
   if (priceEl.length) {
@@ -128,9 +147,37 @@ function extractPageContent(html, url) {
   });
   if (cats.length) meta.categories = cats;
 
-  // Excerpt / description
-  const excerpt = $('.woocommerce-product-details__short-description, .product-short-description');
-  if (excerpt.length) meta.excerpt = excerpt.text().trim().substring(0, 500);
+  // Extract structured specs from textBlocks for vehicle pages
+  if (url.includes('/product/')) {
+    const specPatterns = {
+      mileage: /mileage|odometer|km|kilometres?\s*\d+/i,
+      stock: /stock\s*(?:#|number|no)?[:.\s]*(\w+)/i,
+      year: /year\s*[:.\s]*(\d{4})/i,
+      transmission: /transmission\s*[:.\s]*(\w+)/i,
+      fuel: /fuel\s*(?:type)?[:.\s]*(\w+)/i,
+      colour: /colou?r\s*[:.\s]*(\w+)/i,
+      condition: /condition\s*[:.\s]*(\w+)/i,
+    };
+    for (const block of deduped) {
+      const text = block.text;
+      if (text.toLowerCase().includes('mileage') && /\d{3,}/.test(text)) {
+        const match = text.match(/(\d[\d,]+)/);
+        if (match) meta.mileage = match[1] + ' km';
+      }
+      if (text.toLowerCase().includes('transmission') && !meta.transmission) {
+        meta.transmission = text.replace(/transmission\s*[:.\s]*/i, '').trim();
+      }
+      if (text.toLowerCase().includes('fuel') && !meta.fuel) {
+        meta.fuel = text.replace(/fuel\s*(?:type)?\s*[:.\s]*/i, '').trim();
+      }
+      if (text.toLowerCase().includes('colour') && !meta.colour) {
+        meta.colour = text.replace(/colou?r\s*[:.\s]*/i, '').trim();
+      }
+      if (text.toLowerCase().includes('condition') && !meta.condition) {
+        meta.condition = text.replace(/condition\s*[:.\s]*/i, '').trim();
+      }
+    }
+  }
 
   return {
     url,
@@ -146,9 +193,9 @@ function extractPageContent(html, url) {
 
 // Skip low-value URL patterns
 const SKIP_PATTERNS = [
-  '/partslist/',       // Individual part pages (no readable content)
-  '/?ae_global_templates=', // Template preview pages (duplicate content)
-  '/e-landing-page/',  // Landing page variants (duplicates)
+  '/partslist/',
+  '/?ae_global_templates=',
+  '/e-landing-page/',
 ];
 
 async function scrapeUrl(url, retries = 2) {
@@ -166,8 +213,7 @@ async function scrapeUrl(url, retries = 2) {
       if (!DRY_RUN) process.stderr.write(`  [${attempt ? `retry ${attempt}` : 'fetch'}] ${url}\n`);
       const html = await fetchWithTimeout(url);
       const page = extractPageContent(html, url);
-      
-      // Only keep if we got meaningful content
+
       if (page.content.length > 0 && page.textPlain.trim().length > 20) {
         results.push(page);
         if (!DRY_RUN) process.stderr.write(`  ✓ ${page.title} (${page.wordCount} words)\n`);
@@ -194,7 +240,6 @@ async function run() {
   const sitemapUrls = extractSitemapUrls(sitemapIndex);
   console.log(`Found ${sitemapUrls.length} sitemaps`);
 
-  // Fetch each sitemap
   const allPageUrls = new Set();
   for (const smUrl of sitemapUrls) {
     try {
@@ -218,7 +263,6 @@ async function run() {
     return;
   }
 
-  // Scrape each page sequentially to be polite
   let count = 0;
   const sortedUrls = [...allPageUrls].sort();
   for (const url of sortedUrls) {
@@ -226,7 +270,6 @@ async function run() {
     const slug = url.replace('https://nissansprings.co.za', '').replace(/\/$/, '') || '/';
     process.stderr.write(`\n[${count}/${sortedUrls.length}] ${slug}\n`);
     await scrapeUrl(url);
-    // Polite delay
     await new Promise(r => setTimeout(r, 500));
   }
 
@@ -237,7 +280,6 @@ async function run() {
       .replace('https://nissansprings.co.za', '')
       .replace(/\/$/, '') || '/index';
     const filename = slug.replace(/\//g, '__') + '.json';
-    // Sanitize filename
     const safeName = filename.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
     writeFileSync(join(DATA_DIR, safeName), JSON.stringify(page, null, 2));
   }
