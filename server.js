@@ -99,17 +99,23 @@ function searchKB(query, topK = 10) {
     }
 
     // 🚗 Boost product/vehicle pages heavily — they have the real spec data
-    if (page.url && page.url.includes('/product/')) {
-      score += 80;
-      // Extra boost if query is about vehicles (mileage, price, colour, etc.)
-      const vehicleTerms = ['mileage','price','colour','color','transmission','fuel','used','pre.owned','preowned','car','cars','vehicle','vehicles','stock','kilometre','km','automatic','manual','diesel','petrol'];      
-      const isVehicleQuery = vehicleTerms.some(vt => query.toLowerCase().includes(vt));
-      if (isVehicleQuery) score += 40;
+    const isProduct = page.url && page.url.includes('/product/');
+    const hasSpecs = page.meta?.mileage || page.meta?.price || page.meta?.transmission || page.meta?.colour;
+    const isVehicleQuery = /mileage|price|colour|color|transmission|fuel|used|pre.?owned|preowned|car|vehicle|stock|kilometre|km|automatic|manual|diesel|petrol|lowest|cheapest|cheap|expensive/i.test(query);
+
+    if (isProduct) {
+      score += 200;
+      if (isVehicleQuery) score += 150;
     }
 
-    // Boost pages that contain structured spec data
-    if ((page.meta?.mileage || page.meta?.price || page.meta?.transmission || page.meta?.colour)) {
-      score += 30;
+    if (hasSpecs) {
+      score += 100;
+      if (isVehicleQuery) score += 80;
+    }
+
+    // Penalize non-product pages when query is about vehicles
+    if (isVehicleQuery && !isProduct && !hasSpecs) {
+      score = Math.floor(score / 3);
     }
 
     return { page, score };
@@ -411,6 +417,65 @@ app.get('/api/sources', (req, res) => {
     newVehicles: vehicles,
     preOwnedCount: preOwned.length,
   });
+});
+
+// ─── Ironman Bridge — file-based question forwarding ───
+const BRIDGE_DIR = '/tmp/ironman-bridge';
+try { fs.mkdirSync(BRIDGE_DIR, { recursive: true }); } catch(e) {}
+
+app.post('/api/ask-ironman', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'message is required' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  
+  // Include KB search results for context
+  const searchResults = searchKB(message, 10);
+  const contextPages = searchResults.slice(0, 8).map(r => ({
+    title: r.page.title,
+    url: r.page.url,
+    meta: r.page.meta,
+    text: (r.page.textPlain || '').substring(0, 2000)
+  }));
+
+  // Write question + KB context to bridge file
+  const questionData = { id, question: message, context: contextPages, timestamp: Date.now() };
+  fs.writeFileSync(path.join(BRIDGE_DIR, 'in.json'), JSON.stringify(questionData, null, 2));
+
+  console.log(`🤖 Ironman bridge: ${message.substring(0, 60)}`);
+
+  // Poll for answer (up to 120s)
+  const outFile = path.join(BRIDGE_DIR, 'out.json');
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < 120000) {
+    try {
+      if (fs.existsSync(outFile)) {
+        const answer = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+        if (answer.id === id && answer.done) {
+          // Stream the answer
+          res.write('data: ' + JSON.stringify({ content: answer.answer }) + '\n\n');
+          res.write('data: [DONE]\n\n');
+          res.end();
+          // Clean up
+          fs.unlinkSync(outFile);
+          console.log(`✅ Ironman answer delivered for ${id}`);
+          return;
+        }
+      }
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Timeout
+  res.write('data: ' + JSON.stringify({ error: 'Ironman is thinking too long, sir. Please try again.' }) + '\n\n');
+  res.write('data: [DONE]\n\n');
+  res.end();
 });
 
 // ─── API: Reset ───
