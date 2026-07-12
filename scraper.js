@@ -1,51 +1,58 @@
 #!/usr/bin/env node
-// Nissan Springs website scraper — uses curl for reliable extraction
+/**
+ * Nissan Springs website scraper — full knowledge base version
+ *
+ * Runs the comprehensive Node.js scraper and builds the search index.
+ * Designed for both manual use and the server's auto-update interval.
+ */
+
 const { execSync } = require('child_process');
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 
-const DATA_FILE = path.join(__dirname, 'scraped-data.json');
-const PAGES = [
-  '/', '/promotion/', '/pre-owned-promotions/', '/contact-us/',
-  '/nissan-np200/', '/new-nissan-navara/', '/all-new-nissan-x-trail/',
-  '/application-of-finance-individual/',
-];
-
-function cleanText(html) {
-  let text = html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&[^;]+;/g, ' ')
-    .replace(/\s+/g, ' ').trim()
-    .replace(/Skip to content/gi, '');
-  return text;
-}
+const KB_DIR = path.join(__dirname, 'kb');
 
 async function scrape() {
-  console.log(`[${new Date().toISOString()}] Scraping nissansprings.co.za...`);
-  const results = {};
-  for (const page of PAGES) {
-    try {
-      const html = execSync(`curl -sL --max-time 15 "https://nissansprings.co.za${page}" 2>/dev/null`, {timeout: 20000}).toString();
-      let text = cleanText(html);
-      if (text.length > 200) {
-        results[page] = text.substring(0, 4000);
-        console.log(`  ✓ ${page} (${text.length} chars)`);
-      } else {
-        results[page] = '';
-        console.log(`  ✗ ${page} too short (${text.length})`);
-      }
-    } catch (err) {
-      console.log(`  ✗ ${page} — ${err.message}`);
-      results[page] = '';
+  console.log(`[${new Date().toISOString()}] 🚗 Scraping nissansprings.co.za (full KB)...`);
+
+  try {
+    // Run the full scraper
+    const result = execSync(`node "${path.join(KB_DIR, 'scripts', 'scrape.js')}"`, {
+      cwd: KB_DIR,
+      timeout: 600000,  // 10 min max
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    console.log(result.toString());
+
+    // Build the search index
+    const indexResult = execSync(`node "${path.join(KB_DIR, 'scripts', 'build-index.js')}"`, {
+      cwd: KB_DIR,
+      timeout: 30000,
+    });
+    console.log(indexResult.toString());
+
+    // Read meta
+    const metaFile = path.join(KB_DIR, 'data', 'meta.json');
+    if (fs.existsSync(metaFile)) {
+      const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+      console.log(`✅ Scraped ${meta.totalPages} pages (${meta.totalWords} words)`);
+      return meta;
     }
+
+    return { totalPages: 0, totalWords: 0 };
+  } catch (err) {
+    console.error('❌ Scrape failed:', err.message);
+    if (err.stdout) console.log(err.stdout.toString());
+    if (err.stderr) console.error(err.stderr.toString());
+    throw err;
   }
-  const output = { site: 'nissansprings.co.za', scrapedAt: new Date().toISOString(), pages: results };
-  fs.writeFileSync(DATA_FILE, JSON.stringify(output, null, 2));
-  console.log(`✅ Saved to ${DATA_FILE}`);
 }
 
-if (require.main === module) scrape().catch(e => console.error('Scrape failed:', e.message));
+if (require.main === module) {
+  scrape().catch(e => {
+    console.error('Fatal:', e.message);
+    process.exit(1);
+  });
+}
+
 module.exports = scrape;

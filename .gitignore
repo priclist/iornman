@@ -1,3 +1,5 @@
 node_modules/
 .env
 *.log
+kb/data/*.json
+!kb/data/.gitkeep

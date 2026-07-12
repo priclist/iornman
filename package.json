@@ -1,10 +1,13 @@
 {
   "name": "ironman-chat",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Findy AI Chat — Nissan Springs Knowledge Base",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "scrape": "node kb/scripts/scrape.js",
+    "search": "node kb/scripts/search.js",
+    "rebuild": "node kb/scripts/scrape.js && node kb/scripts/build-index.js"
   },
   "keywords": [],
   "author": "",

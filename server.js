@@ -1,11 +1,17 @@
+/**
+ * Findy AI Chat — Nissan Springs Edition
+ *
+ * Full knowledge-base powered server using comprehensive scraped data
+ * from nissansprings.co.za (171+ pages).
+ */
+
 const express = require('express');
 const app = express();
-const PORT = 3456;
+const PORT = process.env.PORT || 3456;
 const fs = require('fs');
 const path = require('path');
 const homedir = require('os').homedir();
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:18789';
-const SCRAPE_FILE = path.join(__dirname, 'scraped-data.json');
 
 const TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || (function() {
   try {
@@ -17,70 +23,153 @@ const TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || (function() {
 })();
 
 const GATEWAY_TOKEN = TOKEN;
+const KB_DIR = path.join(__dirname, 'kb', 'data');
+const KB_FILE = path.join(KB_DIR, 'knowledge-base.json');
+const INDEX_FILE = path.join(KB_DIR, 'index.json');
+const META_FILE = path.join(KB_DIR, 'meta.json');
 
-let scrapedData = { site: 'nissansprings.co.za', pages: {}, scrapedAt: null };
+// ─── Knowledge Base Loader ───
+let kb = { pages: [], index: {}, meta: { totalPages: 0, totalWords: 0, scrapedAt: null } };
 
-function loadScrapedData() {
+function loadKB() {
   try {
-    if (fs.existsSync(SCRAPE_FILE)) {
-      scrapedData = JSON.parse(fs.readFileSync(SCRAPE_FILE, 'utf8'));
-      console.log('Loaded scraped data from', scrapedData.scrapedAt || 'unknown');
+    if (fs.existsSync(KB_FILE)) {
+      const raw = fs.readFileSync(KB_FILE, 'utf8');
+      kb.pages = JSON.parse(raw);
     }
-  } catch (err) { console.error('Failed to load scraped data:', err.message); }
+    if (fs.existsSync(INDEX_FILE)) {
+      kb.index = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8'));
+    }
+    if (fs.existsSync(META_FILE)) {
+      kb.meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8'));
+    }
+    console.log(`KB loaded: ${kb.pages.length} pages, ${Object.keys(kb.index).length} terms`);
+  } catch (err) {
+    console.error('KB load error:', err.message);
+  }
 }
 
+loadKB();
+
+// Watch for KB file changes
 try {
-  fs.watchFile(SCRAPE_FILE, { interval: 5000 }, () => {
-    try {
-      const raw = fs.readFileSync(SCRAPE_FILE, 'utf8');
-      const parsed = JSON.parse(raw);
-      const hasContent = Object.values(parsed.pages || {}).some(v => v && v.length > 100);
-      if (hasContent) {
-        scrapedData = parsed;
-        console.log('Scraped data auto-refreshed');
-        fs.writeFileSync(SCRAPE_FILE.replace('.json', '-backup.json'), JSON.stringify(scrapedData, null, 2));
-      }
-    } catch(e) { console.log('Watch error:', e.message); }
+  fs.watchFile(KB_FILE, { interval: 10000 }, () => {
+    const raw = fs.readFileSync(KB_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 10) {
+      kb.pages = parsed;
+      console.log(`KB auto-refreshed: ${kb.pages.length} pages`);
+    }
   });
-} catch {}
+} catch(e) { console.log('Watch error:', e.message); }
 
-loadScrapedData();
+// ─── Knowledge Base Search ───
+function tokenize(text) {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s\-\.]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 1);
+}
 
-const SCRAPE_INTERVAL = 30 * 60 * 1000;
-setInterval(() => {
-  const { execSync } = require('child_process');
-  try {
-    execSync('node ' + path.join(__dirname, 'scraper.js'), { timeout: 30000 });
-    loadScrapedData();
-  } catch(err) { console.error('Scheduled scrape failed:', err.message); }
-}, SCRAPE_INTERVAL);
+function searchKB(query, topK = 10) {
+  const terms = tokenize(query);
+  if (terms.length === 0) return [];
 
-function buildConnectedPrompt() {
-  const p = scrapedData.pages || {};
+  const scored = kb.pages.map(page => {
+    const text = (page.textPlain || '').toLowerCase();
+    const title = ((page.title || '') + ' ' + (page.h1 || '')).toLowerCase();
+    let score = 0;
+
+    for (const term of terms) {
+      const titleCount = (title.split(term).length - 1);
+      score += titleCount * 10;
+      const textCount = (text.split(term).length - 1);
+      score += Math.min(textCount * 2, 100);  // cap text score
+    }
+
+    // Boost for product pages
+    if (page.url && page.url.includes('/product/')) score += 5;
+
+    return { page, score };
+  })
+  .filter(r => r.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, topK);
+
+  return scored;
+}
+
+// ─── Build Connected Prompt ───
+function buildConnectedPrompt(query, searchResults) {
   const parts = [];
-  parts.push('Your name is Findy. Always address the user as "sir". Keep responses concise.');
+
+  parts.push('Your name is Findy. Always address the user as "sir". Keep responses concise and natural.');
   parts.push('');
   parts.push('CRITICAL: You are ONLY a Nissan Springs dealership assistant. You CANNOT answer anything outside Nissan Springs.');
   parts.push('');
-  parts.push('LIVE WEBSITE DATA:');
-  parts.push('');
-  if (p['/']) parts.push('HOME: ' + p['/'].substring(0,2000));
-  if (p['/promotion/']) parts.push('PROMOTIONS: ' + p['/promotion/'].substring(0,1500));
-  if (p['/pre-owned-promotions/']) parts.push('PRE-OWNED: ' + p['/pre-owned-promotions/'].substring(0,500));
-  if (p['/contact-us/']) parts.push('CONTACT: ' + p['/contact-us/'].substring(0,1000));
-  if (p['/nissan-np200/']) parts.push('NP200: ' + p['/nissan-np200/'].substring(0,2000));
-  if (p['/new-nissan-navara/']) parts.push('NAVARA: ' + p['/new-nissan-navara/'].substring(0,2000));
-  if (p['/all-new-nissan-x-trail/']) parts.push('X-TRAIL: ' + p['/all-new-nissan-x-trail/'].substring(0,2000));
-  if (p['/application-of-finance-individual/']) parts.push('FINANCE: ' + p['/application-of-finance-individual/'].substring(0,1000));
+
+  // Add topically-relevant KB pages from search
+  if (searchResults.length > 0) {
+    parts.push(`LIVE WEBSITE DATA (most relevant to "${query}"):`);
+    parts.push('');
+    for (const r of searchResults.slice(0, 8)) {
+      const p = r.page;
+      const title = p.title || 'Untitled';
+      const url = p.url || '';
+      const text = (p.textPlain || '').substring(0, 2500);
+      parts.push(`--- ${title} ---`);
+      parts.push(`URL: ${url}`);
+      parts.push(text);
+      parts.push('');
+    }
+
+    // Add some general context pages too
+    const generalUrls = ['/contact-us', '/workshop', '/promotion', '/new-vehicles'];
+    for (const slug of generalUrls) {
+      const found = kb.pages.find(p => p.url && p.url.includes(slug));
+      if (found && !searchResults.some(r => r.page.url === found.url)) {
+        parts.push(`--- ${found.title} ---`);
+        parts.push((found.textPlain || '').substring(0, 800));
+        parts.push('');
+      }
+    }
+  } else {
+    // Fallback to general KB overview
+    parts.push('LIVE WEBSITE DATA (Nissan Springs):');
+    parts.push('');
+
+    // Add key pages
+    const keySlugs = ['/', '/contact-us', '/workshop', '/new-nissan-navara', '/nissan-np200',
+                      '/all-new-nissan-x-trail', '/nissan-magnite', '/nissan-patrol',
+                      '/nissan-almera', '/nissan-qashqai', '/promotion', '/new-vehicles',
+                      '/pre-owned-vehicles', '/application-of-finance-individual',
+                      '/sell-your-car', '/book-a-test-drive', '/express-service',
+                      '/nissan-genuine-parts', '/nissan-springs-blog', '/navara-vs-np200'];
+
+    for (const slug of keySlugs) {
+      const found = kb.pages.find(p => p.url === `https://nissansprings.co.za${slug}/` ||
+                                       p.url === `https://nissansprings.co.za${slug}`);
+      if (found) {
+        parts.push(`--- ${found.title} ---`);
+        parts.push((found.textPlain || '').substring(0, 1500));
+        parts.push('');
+      }
+    }
+  }
+
   parts.push('');
   parts.push('STRICT RULES:');
-  parts.push('- ONLY answer from the website data above.');
-  parts.push('- If the user asks about other car brands (Jeep, Toyota, BMW, etc), say ONLY: "I can only assist with Nissan Springs information, sir."');
-  parts.push('- If data is missing, say so and offer to connect with the dealership.');
-  parts.push('- Data refreshed: ' + (scrapedData.scrapedAt || 'N/A'));
+  parts.push('- ONLY answer from the website data provided above.');
+  parts.push('- If the user asks about other car brands or non-Nissan topics, say ONLY: "I can only assist with Nissan Springs information, sir."');
+  parts.push('- If the data above doesn\'t contain the answer, say so honestly and offer to connect with the dealership.');
+  parts.push('- You can suggest visiting https://nissansprings.co.za or calling the dealership for more details.');
+  parts.push(`- Data last refreshed: ${kb.meta.scrapedAt || 'N/A'}`);
+  parts.push(`- Total pages scraped: ${kb.meta.totalPages || kb.pages.length}`);
+
   return parts.join('\n');
 }
 
+// ─── Express Middleware ───
 app.use((req, res, next) => {
   if (req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.html')) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
@@ -91,8 +180,32 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-const NON_NISSAN_KEYWORDS = ['jeep','toyota','bmw','mercedes','audi','volkswagen','vw','honda','ford','chevrolet','hyundai','kia','mazda','suzuki','subaru','volvo','porsche','ferrari','lamborghini','mitsubishi','peugeot','renault','fiat','jaguar','land rover','dodge','chrysler','lexus','acura','mini','citroen','opel','mg','gwm','haval','chery','byd','tata','mahindra','isuzu','hino','scania','man','iveco','daf','renault trucks'];
+const NON_NISSAN_KEYWORDS = ['jeep','toyota','bmw','mercedes','audi','volkswagen','vw','honda','ford',
+  'chevrolet','hyundai','kia','mazda','suzuki','subaru','volvo','porsche','ferrari','lamborghini',
+  'mitsubishi','peugeot','renault','fiat','jaguar','land rover','dodge','chrysler','lexus','acura',
+  'mini','citroen','opel','mg','gwm','haval','chery','byd','tata','mahindra','isuzu','hino',
+  'scania','man','iveco','daf'];
 
+// ─── API: Search KB directly ───
+app.get('/api/search', (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json({ results: [] });
+  const results = searchKB(q, parseInt(req.query.top || '10'));
+  res.json({
+    query: q,
+    totalPages: kb.pages.length,
+    scrapedAt: kb.meta.scrapedAt,
+    results: results.map(r => ({
+      url: r.page.url,
+      title: r.page.title,
+      score: r.score,
+      snippet: (r.page.textPlain || '').substring(0, 300),
+      meta: r.page.meta
+    }))
+  });
+});
+
+// ─── API: Chat ───
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, mode } = req.body;
   if (!message) return res.status(400).json({ error: 'message is required' });
@@ -117,9 +230,27 @@ app.post('/api/chat', async (req, res) => {
   }
 
   const userKey = sessionId || 'findy-webapp';
-  const systemPrompt = mode === 'connected' ? buildConnectedPrompt() : 'Your name is Findy. Always address the user as "sir". Keep responses concise.';
 
-  console.log('Chat [' + mode + ']: ' + message.substring(0,50));
+  // Build context from KB for connected mode
+  let systemPrompt;
+  if (mode === 'connected') {
+    const searchResults = searchKB(message, 10);
+    const queryForBlock = message.toLowerCase();
+
+    // Check if it's off-topic against what's in our KB
+    const kbTerms = new Set();
+    kb.pages.forEach(p => {
+      if (p.textPlain) {
+        tokenize(p.textPlain).forEach(t => kbTerms.add(t));
+      }
+    });
+
+    systemPrompt = buildConnectedPrompt(message, searchResults);
+  } else {
+    systemPrompt = 'Your name is Findy. Always address the user as "sir". Keep responses concise.';
+  }
+
+  console.log(`Chat [${mode || 'default'}] (${userKey.substring(0,20)}): ${message.substring(0,50)}`);
 
   try {
     const response = await fetch(GATEWAY_URL + '/v1/chat/completions', {
@@ -143,7 +274,7 @@ app.post('/api/chat', async (req, res) => {
     if (!response.ok) {
       const errText = await response.text();
       console.error('API error:', response.status, errText);
-      res.write('data: ' + JSON.stringify({ error: 'API Error (' + response.status + '): ' + errText }) + '\n\n');
+      res.write('data: ' + JSON.stringify({ error: 'API Error (' + response.status + ')' }) + '\n\n');
       res.write('data: [DONE]\n\n');
       res.end();
       return;
@@ -180,101 +311,66 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// ─── API: Status ───
 app.get('/api/status', (req, res) => {
   res.json({
     status: 'ok',
     tokenPrefix: GATEWAY_TOKEN ? GATEWAY_TOKEN.substring(0,12) + '...': 'EMPTY',
-    scrapedAt: scrapedData.scrapedAt,
-    pagesScraped: Object.keys(scrapedData.pages || {}).length,
+    scrapedAt: kb.meta.scrapedAt,
+    pagesScraped: kb.pages.length,
+    indexedTerms: Object.keys(kb.index).length,
     uptime: process.uptime().toFixed(0) + 's',
   });
 });
 
-
+// ─── API: Vehicle Sources ───
 app.get('/api/sources', (req, res) => {
-  const p = scrapedData.pages || {};
   const vehicles = [];
 
-  // Parse NP200 data
-  if (p['/nissan-np200/']) {
-    const txt = p['/nissan-np200/'];
-    const price = txt.match(/R[\s]?[\d,]+/g) || [];
-    vehicles.push({
-      id: 'np200',
-      name: 'Nissan NP200',
-      type: 'Bakkie',
-      price: 'R2,190/mo',
-      fromPrice: 'R239,950',
-      payload: '800kg',
-      views: 12450,
-      sales: 89,
-      trend: 'up',
-      color: '#d4a535'
-    });
-  }
-  if (p['/new-nissan-navara/']) {
-    vehicles.push({
-      id: 'navara',
-      name: 'Nissan Navara',
-      type: 'Bakkie',
-      price: 'R5,665/mo',
-      fromPrice: 'R406,500',
-      payload: '1,086kg',
-      views: 18320,
-      sales: 134,
-      trend: 'up',
-      color: '#c41e1e'
-    });
-  }
-  if (p['/all-new-nissan-x-trail/']) {
-    vehicles.push({
-      id: 'xtrail',
-      name: 'Nissan X-Trail',
-      type: 'SUV',
-      price: 'R9,999/mo',
-      fromPrice: 'R669,400',
-      engine: '2.5L Petrol',
-      views: 9870,
-      sales: 67,
-      trend: 'up',
-      color: '#22c55e'
-    });
-  }
-  if (p['/']) {
-    const txt = p['/'];
-    if (txt.toLowerCase().includes('magnite')) {
+  // Search KB for new vehicle pages
+  const newVehicleSlugs = ['nissan-np200', 'new-nissan-navara', 'all-new-nissan-x-trail',
+    'nissan-magnite', 'nissan-patrol', 'nissan-almera', 'nissan-qashqai'];
+
+  for (const slug of newVehicleSlugs) {
+    const page = kb.pages.find(p => p.url && p.url.includes(slug));
+    if (page) {
+      const txt = page.textPlain || '';
+      const prices = txt.match(/R[\s]?[\d,]+(?:\s*(?:\/mo|per month|monthly|p\/m))?/gi) || [];
       vehicles.push({
-        id: 'magnite',
-        name: 'Nissan Magnite',
-        type: 'SUV',
-        price: 'R227,900',
-        engine: '1.0L',
-        views: 5630,
-        sales: 42,
-        trend: 'stable',
-        color: '#3b82f6'
+        id: slug.replace('nissan-', '').replace('new-', '').replace('all-new-', ''),
+        name: page.title ? page.title.replace(' | Nissan Springs', '').trim() : slug,
+        type: txt.toLowerCase().includes('suv') ? 'SUV' : txt.toLowerCase().includes('bakkie') ? 'Bakkie' : 'Vehicle',
+        url: page.url,
+        scrapedAt: page.scrapedAt
       });
     }
   }
 
-  // Sort by views
-  const byViews = [...vehicles].sort((a, b) => b.views - a.views);
-  // Sort by sales
-  const bySales = [...vehicles].sort((a, b) => b.sales - a.sales);
+  // Get pre-owned vehicle count
+  const preOwned = kb.pages.filter(p => p.url && p.url.includes('/product/'));
+  const blogPosts = kb.pages.filter(p => p.url && p.url.includes('/nissan-') && !p.url.includes('/product/') && !p.url.includes('/meet-the-nissan-team'));
 
   res.json({
     source: 'nissansprings.co.za',
-    scrapedAt: scrapedData.scrapedAt,
-    vehicles,
-    bestSelling: bySales[0] || null,
-    mostViewed: byViews[0] || null,
-    topByViews: byViews,
-    topBySales: bySales,
-    totalVehicles: vehicles.length,
+    scrapedAt: kb.meta.scrapedAt,
+    totalPages: kb.pages.length,
+    totalWords: kb.meta.totalWords,
+    newVehicles: vehicles,
+    preOwnedCount: preOwned.length,
+    blogPosts: blogPosts.length,
   });
 });
 
+// ─── API: Reset ───
+app.post('/api/reset', (req, res) => {
+  // No-op, session handling is stateless
+  res.json({ ok: true });
+});
+
+// ─── Start ───
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('Findy AI Chat running on http://0.0.0.0:' + PORT);
-  console.log('Auto-scraping nissansprings.co.za every ' + SCRAPE_INTERVAL/60000 + ' minutes');
+  console.log('🏪 Findy AI Chat — Nissan Springs Edition');
+  console.log(`   Server: http://0.0.0.0:${PORT}`);
+  console.log(`   KB: ${kb.pages.length} pages, ${Object.keys(kb.index).length} terms`);
+  console.log(`   Last scraped: ${kb.meta.scrapedAt || 'never'}`);
 });
