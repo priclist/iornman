@@ -281,7 +281,7 @@ app.get('/api/sources/:source', async (req, res) => {
   }
 });
 
-// ─── API: Chat ───
+// ─── API: Chat — both general & connected route through Ironman bridge ───
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, mode } = req.body;
   if (!message) return res.status(400).json({ error: 'message is required' });
@@ -291,88 +291,50 @@ app.post('/api/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  // KB-aware off-topic check
-  if (mode === 'connected') {
-    const offTopic = isTrulyOffTopic(message);
-    if (offTopic) {
-      console.log('Blocked off-topic:', message.substring(0,50));
-      const reply = 'I can only assist with Nissan Springs information, sir. Please ask about our vehicles, services, or promotions.';
-      res.write('data: ' + JSON.stringify({ content: reply }) + '\n\n');
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
-  }
-
+  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const userKey = sessionId || 'findy-webapp';
 
-  let systemPrompt;
+  console.log(`Chat [${mode || 'default'}] (${userKey.substring(0,20)}): ${message.substring(0,60)}`);
+
+  // Include KB context for connected mode
+  let contextPages = [];
   if (mode === 'connected') {
     const searchResults = searchKB(message, 10);
-    systemPrompt = buildConnectedPrompt(message, searchResults);
-  } else {
-    systemPrompt = 'Your name is Findy. Always address the user as "sir". Keep responses concise.';
+    contextPages = searchResults.slice(0, 8).map(r => ({
+      title: r.page.title,
+      url: r.page.url,
+      meta: r.page.meta,
+      text: (r.page.textPlain || '').substring(0, 2000)
+    }));
   }
 
-  console.log(`Chat [${mode || 'default'}] (${userKey.substring(0,20)}): ${message.substring(0,50)}`);
+  // Write question to bridge file
+  const questionData = { id, question: message, context: contextPages, mode: mode || 'general', timestamp: Date.now() };
+  fs.writeFileSync(path.join(BRIDGE_DIR, 'in.json'), JSON.stringify(questionData, null, 2));
 
-  try {
-    const response = await fetch(GATEWAY_URL + '/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + GATEWAY_TOKEN,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'openclaw/default',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message }
-        ],
-        stream: true,
-        max_tokens: 4096,
-        user: userKey,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('API error:', response.status, errText);
-      res.write('data: ' + JSON.stringify({ error: 'API Error (' + response.status + ')' }) + '\n\n');
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (data === '[DONE]') { res.write('data: [DONE]\n\n'); continue; }
-        try {
-          const parsed = JSON.parse(data);
-          const content = parsed.choices?.[0]?.delta?.content || '';
-          if (content) res.write('data: ' + JSON.stringify({ content }) + '\n\n');
-        } catch {}
+  // Poll for answer
+  const outFile = path.join(BRIDGE_DIR, 'out.json');
+  const startTime = Date.now();
+  while (Date.now() - startTime < 120000) {
+    try {
+      if (fs.existsSync(outFile)) {
+        const answer = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+        if (answer.id === id && answer.done) {
+          res.write('data: ' + JSON.stringify({ content: answer.answer }) + '\n\n');
+          res.write('data: [DONE]\n\n');
+          res.end();
+          fs.unlinkSync(outFile);
+          console.log(`✅ Answer delivered for ${id}`);
+          return;
+        }
       }
-    }
-    res.write('data: [DONE]\n\n');
-    res.end();
-  } catch (err) {
-    console.error('Proxy error:', err.message);
-    res.write('data: ' + JSON.stringify({ error: 'Server error: ' + err.message }) + '\n\n');
-    res.write('data: [DONE]\n\n');
-    res.end();
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 500));
   }
+
+  res.write('data: ' + JSON.stringify({ error: 'Taking too long. Try again.' }) + '\n\n');
+  res.write('data: [DONE]\n\n');
+  res.end();
 });
 
 // ─── API: Status ───
