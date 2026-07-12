@@ -84,7 +84,7 @@ function extractPageContent(html, url) {
 
   // Extract clean text
   const textBlocks = [];
-  mainEl.find('h1, h2, h3, h4, h5, h6, p, li, td, th, .price, .woocommerce-Price-amount, dt, dd, .product-title, .description, .stock, .sku, .product_meta').each((i, el) => {
+  mainEl.find('h1, h2, h3, h4, h5, h6, p, li, td, th, .price, .woocommerce-Price-amount, dt, dd, .product-title, .description, .stock, .sku, .product_meta, .elementor-heading-title').each((i, el) => {
     const tag = $(el).prop('tagName')?.toLowerCase() || '';
     const text = $(el).text().trim();
     if (!text || text.length < 2) return;

@@ -184,7 +184,7 @@ function addMessage(role, content, isStreaming = false) {
   const div = document.createElement('div');
   div.className = `message ${role}`;
 
-  const header = role === 'assistant' ? 'Findy' : '';
+  const header = role === 'assistant' ? 'Nissan Springs AI' : '';
   const rendered = role === 'assistant' ? renderContent(content) : content.replace(/\n/g, '<br>');
 
   div.innerHTML = `

@@ -13,7 +13,7 @@ const path = require('path');
 const homedir = require('os').homedir();
 const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:18789';
 
-const TOKEN = proces…OKEN || (function() {
+const TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || (function() {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(homedir,'.openclaw','openclaw.json'),'utf8'));
     const t = cfg.gateway?.auth?.token;
@@ -22,7 +22,7 @@ const TOKEN = proces…OKEN || (function() {
   return '';
 })();
 
-const GATEWAY_TOKEN = ***
+const GATEWAY_TOKEN = TOKEN;
 const KB_DIR = path.join(__dirname, 'kb', 'data');
 const KB_FILE = path.join(KB_DIR, 'knowledge-base.json');
 const INDEX_FILE = path.join(KB_DIR, 'index.json');
@@ -302,7 +302,7 @@ app.post('/api/chat', async (req, res) => {
     const response = await fetch(GATEWAY_URL + '/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': '***' + GATEWAY_TOKEN,
+        'Authorization': 'Bearer ' + GATEWAY_TOKEN,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
