@@ -84,7 +84,7 @@ function extractPageContent(html, url) {
 
   // Extract text blocks with comprehensive selectors
   const textBlocks = [];
-  mainEl.find('.elementor-heading-title, h1, h2, h3, h4, h5, h6, p, li, td, th, .price, .woocommerce-Price-amount, dt, dd, .product-title, .description, .stock, .sku, .product_meta, .woocommerce-product-attributes th, .woocommerce-product-attributes td, .woocommerce-product-attributes-item__label, .woocommerce-product-attributes-item__value, .single-product .entry-summary, .single-product .summary, .product-attribute, .attribute-label, .attribute-value, .spec-item, .spec-label, .spec-value, .vehicle-specs, .vehicle-spec, .car-detail, .car-details, [data-spec], [data-attribute], span, strong, b, div.product_meta, div.woocommerce-product-details__short-description, .elementor-widget-container').each((i, el) => {
+  mainEl.find('.elementor-heading-title, h1, h2, h3, h4, h5, h6, p, li, td, th, .price, .woocommerce-Price-amount, dt, dd, .product-title, .description, .stock, .sku, .product_meta, .woocommerce-product-attributes th, .woocommerce-product-attributes td, .woocommerce-product-attributes-item__label, .woocommerce-product-attributes-item__value, [data-name], .single-product .entry-summary, .single-product .summary, .product-attribute, .attribute-label, .attribute-value, .spec-item, .spec-label, .spec-value, .vehicle-specs, .vehicle-spec, .car-detail, .car-details, [data-spec], [data-attribute], #tab-description p, span, strong, b, div.product_meta, div.woocommerce-product-details__short-description, .elementor-widget-container').each((i, el) => {
     const tag = $(el).prop('tagName')?.toLowerCase() || '';
     const text = $(el).text().trim();
     if (!text || text.length < 2) return;
