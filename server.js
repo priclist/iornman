@@ -281,7 +281,7 @@ app.get('/api/sources/:source', async (req, res) => {
   }
 });
 
-// ─── API: Chat — both general & connected route through Ironman bridge ───
+// ─── API: Chat — powered by Gateway API ───
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, mode } = req.body;
   if (!message) return res.status(400).json({ error: 'message is required' });
@@ -291,50 +291,82 @@ app.post('/api/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const userKey = sessionId || 'findy-webapp';
 
   console.log(`Chat [${mode || 'default'}] (${userKey.substring(0,20)}): ${message.substring(0,60)}`);
 
-  // Include KB context for connected mode
-  let contextPages = [];
-  if (mode === 'connected') {
-    const searchResults = searchKB(message, 10);
-    contextPages = searchResults.slice(0, 8).map(r => ({
-      title: r.page.title,
-      url: r.page.url,
-      meta: r.page.meta,
-      text: (r.page.textPlain || '').substring(0, 2000)
-    }));
-  }
+  try {
+    // Build system prompt with KB context
+    let systemPrompt = 'You are Findy, a helpful AI assistant. Keep responses concise and natural. Address the user as "sir".';
+    if (mode === 'connected') {
+      const searchResults = searchKB(message, 10);
+      systemPrompt = buildConnectedPrompt(message, searchResults);
+    }
 
-  // Write question to bridge file
-  const questionData = { id, question: message, context: contextPages, mode: mode || 'general', timestamp: Date.now() };
-  fs.writeFileSync(path.join(BRIDGE_DIR, 'in.json'), JSON.stringify(questionData, null, 2));
+    // Call Gateway OpenAI-compatible API for AI responses
+    const gwRes = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'openclaw/default',
+        stream: true,
+        user: userKey,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ]
+      })
+    });
 
-  // Poll for answer
-  const outFile = path.join(BRIDGE_DIR, 'out.json');
-  const startTime = Date.now();
-  while (Date.now() - startTime < 120000) {
-    try {
-      if (fs.existsSync(outFile)) {
-        const answer = JSON.parse(fs.readFileSync(outFile, 'utf8'));
-        if (answer.id === id && answer.done) {
-          res.write('data: ' + JSON.stringify({ content: answer.answer }) + '\n\n');
-          res.write('data: [DONE]\n\n');
-          res.end();
-          fs.unlinkSync(outFile);
-          console.log(`✅ Answer delivered for ${id}`);
-          return;
-        }
+    if (!gwRes.ok) {
+      const errText = await gwRes.text();
+      console.error('Gateway error:', gwRes.status, errText);
+      res.write('data: ' + JSON.stringify({ error: `Gateway error: ${gwRes.status}` }) + '\n\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    // Stream the response back to the client
+    const reader = gwRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed.choices?.[0]?.delta?.content || '';
+          if (content) {
+            res.write('data: ' + JSON.stringify({ content }) + '\n\n');
+          }
+        } catch {}
       }
-    } catch(e) {}
-    await new Promise(r => setTimeout(r, 500));
-  }
+    }
 
-  res.write('data: ' + JSON.stringify({ error: 'Taking too long. Try again.' }) + '\n\n');
-  res.write('data: [DONE]\n\n');
-  res.end();
+    res.write('data: [DONE]\n\n');
+    res.end();
+    console.log(`✅ Answer delivered for ${userKey.substring(0,20)}`);
+  } catch (err) {
+    console.error('Chat error:', err.message);
+    res.write('data: ' + JSON.stringify({ error: err.message }) + '\n\n');
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
 });
 
 // ─── API: Status ───
@@ -349,7 +381,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // ─── API: Nissan Springs Vehicles ───
-app.get('/api/sources', (req, res) => {
+app.get('/api/vehicles', (req, res) => {
   const vehicles = [];
 
   const newVehicleSlugs = ['nissan-np200', 'new-nissan-navara', 'all-new-nissan-x-trail',
@@ -381,10 +413,7 @@ app.get('/api/sources', (req, res) => {
   });
 });
 
-// ─── Ironman Bridge — file-based question forwarding ───
-const BRIDGE_DIR = '/tmp/ironman-bridge';
-try { fs.mkdirSync(BRIDGE_DIR, { recursive: true }); } catch(e) {}
-
+// ─── Ironman AI — powered by Gateway API ───
 app.post('/api/ask-ironman', async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'message is required' });
@@ -394,55 +423,83 @@ app.post('/api/ask-ironman', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  const id = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-  
-  // Include KB search results for context
-  const searchResults = searchKB(message, 10);
-  const contextPages = searchResults.slice(0, 8).map(r => ({
-    title: r.page.title,
-    url: r.page.url,
-    meta: r.page.meta,
-    text: (r.page.textPlain || '').substring(0, 2000)
-  }));
+  const userKey = 'ironman-' + Date.now();
+  console.log(`🤖 Ironman AI: ${message.substring(0, 60)}`);
 
-  // Write question + KB context to bridge file
-  const questionData = { id, question: message, context: contextPages, timestamp: Date.now() };
-  fs.writeFileSync(path.join(BRIDGE_DIR, 'in.json'), JSON.stringify(questionData, null, 2));
+  try {
+    // Build prompt with KB context
+    const searchResults = searchKB(message, 10);
+    const systemPrompt = buildConnectedPrompt(message, searchResults);
 
-  console.log(`🤖 Ironman bridge: ${message.substring(0, 60)}`);
+    // Call Gateway API
+    const gwRes = await fetch(`${GATEWAY_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'openclaw/default',
+        stream: true,
+        user: userKey,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ]
+      })
+    });
 
-  // Poll for answer (up to 120s)
-  const outFile = path.join(BRIDGE_DIR, 'out.json');
-  const startTime = Date.now();
-  
-  while (Date.now() - startTime < 120000) {
-    try {
-      if (fs.existsSync(outFile)) {
-        const answer = JSON.parse(fs.readFileSync(outFile, 'utf8'));
-        if (answer.id === id && answer.done) {
-          // Stream the answer
-          res.write('data: ' + JSON.stringify({ content: answer.answer }) + '\n\n');
-          res.write('data: [DONE]\n\n');
-          res.end();
-          // Clean up
-          fs.unlinkSync(outFile);
-          console.log(`✅ Ironman answer delivered for ${id}`);
-          return;
-        }
+    if (!gwRes.ok) {
+      const errText = await gwRes.text();
+      console.error('Gateway error:', gwRes.status, errText);
+      res.write('data: ' + JSON.stringify({ error: `Gateway error: ${gwRes.status}` }) + '\n\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+
+    // Stream the response
+    const reader = gwRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const content = parsed.choices?.[0]?.delta?.content || '';
+          if (content) {
+            res.write('data: ' + JSON.stringify({ content }) + '\n\n');
+          }
+        } catch {}
       }
-    } catch(e) {}
-    await new Promise(r => setTimeout(r, 500));
-  }
+    }
 
-  // Timeout
-  res.write('data: ' + JSON.stringify({ error: 'Ironman is thinking too long, sir. Please try again.' }) + '\n\n');
-  res.write('data: [DONE]\n\n');
-  res.end();
+    res.write('data: [DONE]\n\n');
+    res.end();
+    console.log(`✅ Ironman answer delivered`);
+  } catch (err) {
+    console.error('Ironman error:', err.message);
+    res.write('data: ' + JSON.stringify({ error: err.message }) + '\n\n');
+    res.write('data: [DONE]\n\n');
+    res.end();
+  }
 });
 
 // ─── API: Reset ───
 app.post('/api/reset', (req, res) => {
-  res.json({ ok: true });
+  res.json({ ok: true, message: 'Session reset, sir.' });
 });
 
 // ─── Start ───
