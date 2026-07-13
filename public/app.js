@@ -101,8 +101,23 @@ logoutBtn.addEventListener('click', () => {
 chatConnected.addEventListener('click', () => switchMode('connected'));
 
 function switchMode(mode) {
+  // Abort any in-flight request and reset state so the new mode isn't locked
+  if (isProcessing && abortController) {
+    abortController.abort();
+  }
+  isProcessing = false;
+  abortController = null;
+  hideTyping();
+
   currentMode = mode;
   sessionId = 'findy_' + Date.now();
+
+  // Save the current conversation before switching, then start fresh
+  if (activeConvIndex >= 0 && conversations[activeConvIndex]) {
+    conversations[activeConvIndex].html = messagesContainer.innerHTML;
+    conversations[activeConvIndex].sessionId = sessionId;
+    saveConversations();
+  }
 
   document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
   if (mode === 'connected') {
@@ -115,7 +130,9 @@ function switchMode(mode) {
   }
 
   messagesContainer.innerHTML = getWelcomeHTML(mode);
-  hideTyping();
+  input.value = '';
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
   closeSidebar();
 }
 
@@ -343,6 +360,17 @@ if (conversations.length === 0) {
 } else {
   activeConvIndex = 0;
   sessionId = conversations[0].sessionId || sessionId;
+  // Restore the saved mode for this conversation
+  const savedMode = conversations[0].mode || 'default';
+  currentMode = savedMode;
+  if (savedMode === 'connected') {
+    chatConnected.classList.add('active');
+    if (headerTitle) headerTitle.textContent = 'Nissan Springs';
+    input.placeholder = 'Ask about Nissan Springs, sir...';
+  } else {
+    if (headerTitle) headerTitle.textContent = 'Nissan Springs AI';
+    input.placeholder = 'Ask me anything, sir...';
+  }
 }
 renderConversationList();
 input.focus();
